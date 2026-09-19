@@ -34,6 +34,7 @@ ShellRoot {
 
     // Stuff for every panel family
     ReloadPopup {}
+    AltTabSwitcher {}
     IdleDim {} // hypridle's 120 s dim, see hypr/hypridle.conf
 
     // Boot split: only what the FIRST PAINT needs runs during engine load.
