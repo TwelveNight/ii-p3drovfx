@@ -760,6 +760,8 @@ done"
             # --refresh-frame is a --noswitch run that only re-picks the frame.
             if is_desktop_target && [[ ( "$colors_only_flag" != "1" && "$noswitch_flag" != "1" ) || "$refresh_frame_flag" == "1" ]]; then
                 set_thumbnail_path "$thumbnail"
+            elif [[ -n "$skwd_wall_flag" ]]; then
+                set_thumbnail_path "$thumbnail"
             fi
 
             if [ -f "$thumbnail" ]; then
@@ -782,6 +784,11 @@ done"
         else
             if is_desktop_target && [[ "$colors_only_flag" != "1" && "$noswitch_flag" != "1" ]]; then
                 kill_existing_mpvpaper
+            fi
+            # skwd's static image has no video preview. Clear any thumbnail
+            # left by the previous video so II metadata remains truthful.
+            if [[ -n "$skwd_wall_flag" ]]; then
+                set_thumbnail_path ""
             fi
             matugen_args+=(image "$imgpath")
             generate_colors_material_args=(--path "$imgpath")
@@ -944,6 +951,7 @@ main() {
     color_flag=""
     color=""
     noswitch_flag=""
+    skwd_wall_flag=""
 
     get_type_from_config() {
         jq -r '.appearance.palette.type' "$SHELL_CONFIG_FILE" 2>/dev/null || echo "auto"
@@ -1005,6 +1013,14 @@ main() {
                 shift
                 ;;
             --colors-only)
+                colors_only_flag="1"
+                shift
+                ;;
+            --skwd-wall)
+                # skwd-paper has already applied this wallpaper. This mode is
+                # deliberately colour/state-only: never start mpvpaper or the
+                # legacy Wallpaper Engine renderer from an event callback.
+                skwd_wall_flag="1"
                 colors_only_flag="1"
                 shift
                 ;;
@@ -1125,6 +1141,11 @@ main() {
     # Fallback to default wallpaper if empty
     if [[ -z "$imgpath" || "$imgpath" == "null" ]]; then
         imgpath="$CONFIG_DIR/assets/images/default_wallpaper.png"
+    fi
+
+    if [[ -n "$skwd_wall_flag" ]]; then
+        disable_wpe_config
+        set_wallpaper_path "$imgpath" "desktop"
     fi
 
     # If --lightmode is passed and --noswitch is passed:
