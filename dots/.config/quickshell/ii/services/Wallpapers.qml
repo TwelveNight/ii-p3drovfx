@@ -10,8 +10,8 @@ pragma Singleton
 pragma ComponentBehavior: Bound
 
 /**
- * Provides a list of wallpapers and an "apply" action that calls the existing
- * switchwall.sh script. Pretty much a limited file browsing service.
+ * Keeps II's wallpaper metadata and colour consumers in sync with skwd-wall.
+ * skwd-paper is the desktop renderer for images, videos and Wallpaper Engine.
  */
 Singleton {
     id: root
@@ -296,13 +296,8 @@ Singleton {
         function onReadyChanged() {
             if (!Config.ready) return;
             root.loadSortOptions();
-            if (Config.options.background.useWallpaperEngine) {
-                if (Config.options.background.wallpaperEngineId) {
-                    root.apply(Config.options.background.wallpaperEngineId, Appearance.m3colors.darkmode);
-                }
-            } else if (root.isVideoFile(Config.options.background.wallpaperPath.toLowerCase())) {
-                root.apply(Config.options.background.wallpaperPath, Appearance.m3colors.darkmode);
-            }
+            // Do not restore II's persisted path here: skwd-walld owns the
+            // canonical active wallpaper and the listener syncs it back.
             root.enforceVideoWallpaperConstraints();
             root.recordRecent(Config.options.background.wallpaperPath);
             // Pre-generate lockscreen colors if configured but missing
@@ -360,6 +355,10 @@ Singleton {
     }
 
     function openFallbackPicker(darkMode = Appearance.m3colors.darkmode, lockscreen = false) {
+        if (!lockscreen) {
+            Quickshell.execDetached(["skwd-wall-v2"]);
+            return;
+        }
         const envBinPath = `${FileUtils.trimFileProtocol(Directories.home)}/.local/bin:${FileUtils.trimFileProtocol(Directories.home)}/.cargo/bin:/usr/local/bin:/usr/bin:/bin`;
         let args = [
             "env", "-u", "LD_LIBRARY_PATH", "-u", "PYTHONHOME", "-u", "PYTHONPATH",
@@ -397,14 +396,9 @@ Singleton {
             }
         }
         if (optionsChanged) Config.saveOptionsNow();
-        const requestSeq = ++root._wallpaperRequestSeq;
-        const envBinPath = `${FileUtils.trimFileProtocol(Directories.home)}/.local/bin:${FileUtils.trimFileProtocol(Directories.home)}/.cargo/bin:/usr/local/bin:/usr/bin:/bin`;
-        Quickshell.execDetached([
-            "env", "-u", "LD_LIBRARY_PATH", "-u", "PYTHONHOME", "-u", "PYTHONPATH",
-            `PATH=${envBinPath}`, "bash", Directories.wallpaperSwitchScriptPath,
-            "--mode", darkMode ? "dark" : "light", "--image", path,
-            "--request-seq", String(requestSeq)
-        ]);
+        // The skwd watcher invokes switchwall.sh only after the renderer has
+        // accepted the request, so Matugen follows what is actually on screen.
+        Quickshell.execDetached(["skwd-helm", "apply", path]);
         root.changed();
     }
 

@@ -614,6 +614,9 @@ PanelWindow {
 
         WallpaperImage {
             id: wallpaperImage
+            // The skwd-paper layer is the sole desktop renderer. II still
+            // draws this image while locked, where it supplies the lock view.
+            visible: GlobalStates.screenLocked
             overviewController: overviewController
             screen: bgRoot.screen
             wallpaperPath: bgRoot.wallpaperPath

@@ -50,7 +50,7 @@ ShellRoot {
             Qt.application.organizationDomain = "unknown.organization";
         }
         MaterialThemeLoader.reapplyTheme();
-        Wallpapers.load(); // The background layer renders the wallpaper — needed for first paint
+        Wallpapers.load();
         ConflictKiller.load(); // Startup hygiene: conflicting notification daemons must die early
         deferredServicesTimer.restart();
     }

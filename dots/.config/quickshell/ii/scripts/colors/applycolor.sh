@@ -88,10 +88,9 @@ os.rename(tmp_path, output_path)
   fi
 
   # Reload
-  if ! pgrep -f kitty >/dev/null; then
-    return
-  fi
-  kill -SIGUSR1 $(pidof kitty)
+  # `pgrep -f kitty` can match unrelated command lines while `pidof` returns
+  # several PIDs as one word under a modified IFS.  Target Kitty itself.
+  pkill -USR1 -x kitty 2>/dev/null || true
 }
 
 apply_anyterm() {
