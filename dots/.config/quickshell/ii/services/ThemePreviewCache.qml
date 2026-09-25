@@ -186,7 +186,7 @@ Singleton {
         const script = `${Directories.scriptPath}/colors/generate_colors_material.py`;
         const termscheme = `${Directories.scriptPath}/colors/terminal/scheme-base.json`;
         const out = Directories.wallpaperPreviewColorsPath;
-        const token = `${Directories.state}/user/generated/.preview_request_token`;
+        const token = `${Directories.wallpaperThemeStatePath}/request_token`;
         return `unset LD_LIBRARY_PATH PYTHONHOME PYTHONPATH; `
             + `export PATH="$HOME/.local/bin:$HOME/.cargo/bin:$PATH"; `
             + `venv="\${ILLOGICAL_IMPULSE_VIRTUAL_ENV:-\${XDG_STATE_HOME:-$HOME/.local/state}/quickshell/.venv}"; `

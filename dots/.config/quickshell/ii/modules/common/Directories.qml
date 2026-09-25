@@ -13,6 +13,7 @@ Singleton {
     readonly property string home: StandardPaths.standardLocations(StandardPaths.HomeLocation)[0] || ""
     readonly property string config: StandardPaths.standardLocations(StandardPaths.ConfigLocation)[0] || ""
     readonly property string state: StandardPaths.standardLocations(StandardPaths.StateLocation)[0] || ""
+    readonly property string wallpaperThemeStatePath: FileUtils.trimFileProtocol(`${Directories.state}/ii-skwd-wall`)
     readonly property string cache: StandardPaths.standardLocations(StandardPaths.CacheLocation)[0] || ""
     readonly property string genericCache: StandardPaths.standardLocations(StandardPaths.GenericCacheLocation)[0] || ""
     readonly property string documents: StandardPaths.standardLocations(StandardPaths.DocumentsLocation)[0] || ""
