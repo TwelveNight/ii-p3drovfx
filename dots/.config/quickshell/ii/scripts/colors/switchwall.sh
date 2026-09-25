@@ -427,11 +427,10 @@ switch() {
     # increasing in click order, since QML dispatch is single-threaded. Direct
     # callers without a sequence receive the next token under the same lock, so
     # they cannot be rejected just because an older QML token uses timestamps.
-    if [[ -n "$colors_only_flag" ]]; then
-        request_token_file="$SKWD_THEME_STATE_DIR/request_token"
-    else
-        request_token_file="$STATE_DIR/user/generated/.preview_request_token"
-    fi
+    # Keep coordination state away from generated/: MaterialThemeLoader watches
+    # that directory for colors.json and treats unrelated file changes as theme
+    # reloads.
+    request_token_file="$SKWD_THEME_STATE_DIR/request_token"
     mkdir -p "$(dirname "$request_token_file")"
     if [[ -n "$request_seq_flag" ]]; then
         my_request_token="$request_seq_flag"
@@ -879,11 +878,7 @@ done"
     fi
     generate_colors_material_args+=(--scheme "$type_flag")
     generate_colors_material_args+=(--termscheme "$terminalscheme" --blend_bg_fg)
-    if [[ -n "$colors_only_flag" ]]; then
-        generate_colors_material_args+=(--cache "$SKWD_THEME_STATE_DIR/color.txt")
-    else
-        generate_colors_material_args+=(--cache "$STATE_DIR/user/generated/color.txt")
-    fi
+    generate_colors_material_args+=(--cache "$SKWD_THEME_STATE_DIR/color.txt")
 
     # Preset application already has the mode/config state in place. Avoid the
     # synchronous GNOME settings calls and cache-directory setup on the first
@@ -921,16 +916,13 @@ done"
         "$SCRIPT_DIR"/applycolor.sh
     else
         matugen_exit_code=0
-        matugen_config_args=()
         atomic_colors_file=""
         atomic_matugen_config=""
-        if [[ -n "$colors_only_flag" && -f "$SHELL_MATUGEN_CONFIG" ]]; then
-            # The normal config fans out to GTK, Hyprland, terminals, yazi,
-            # browsers and other integrations. The first preset frame only
-            # needs the m3colors template that Quickshell watches. Generate it
-            # away from the watched path, then publish it with one atomic rename:
-            # writing colors.json in place makes FileView reload partial and
-            # completed contents and can peg the QML thread for several seconds.
+        matugen_config_args=()
+        if [[ -f "$SHELL_MATUGEN_CONFIG" ]]; then
+            # Quickshell watches colors.json. Always publish that one template
+            # atomically, even when the normal Matugen config also updates
+            # external consumers such as GTK and Hyprland.
             mkdir -p "$STATE_DIR/user/generated" "$SKWD_THEME_STATE_DIR"
             atomic_colors_file=$(mktemp "$SKWD_THEME_STATE_DIR/colors.json.tmp.XXXXXX")
             atomic_matugen_config=$(mktemp "${TMPDIR:-/tmp}/ii-matugen-shell.XXXXXX.toml")
@@ -943,14 +935,17 @@ done"
             # Matugen cannot pin a role, but it renders templates from a dump:
             # generate the dump, patch the picked colors in, render from it.
             matugen_dump="$(mktemp --suffix=.json)"
-            if matugen "${matugen_config_args[@]}" "${matugen_args[@]}" --dry-run -q -j hex --include-image-in-json true > "$matugen_dump" \
+            if matugen "${matugen_args[@]}" --dry-run -q -j hex --include-image-in-json true > "$matugen_dump" \
                 && run_color_overrides patch-dump "$matugen_dump" --mode "$mode_flag" --overrides "$color_overrides" \
+                && { [[ -n "$colors_only_flag" ]] || matugen json "$matugen_dump"; } \
                 && matugen "${matugen_config_args[@]}" json "$matugen_dump"; then
                 rm -f "$STATE_DIR/matugen_error_notified"
             else
                 matugen_exit_code=$?
             fi
             rm -f "$matugen_dump"
+        elif [[ -z "$colors_only_flag" ]] && ! matugen "${matugen_args[@]}"; then
+            matugen_exit_code=1
         elif matugen "${matugen_config_args[@]}" "${matugen_args[@]}"; then
             rm -f "$STATE_DIR/matugen_error_notified"
         else
@@ -1023,12 +1018,6 @@ done"
     #python3 "$HOME/.config/quickshell/ii/scripts/colors/recolor_icons.py"
     #local _venv="${ILLOGICAL_IMPULSE_VIRTUAL_ENV:-$XDG_STATE_HOME/quickshell/.venv}"
     #source "$(eval echo $_venv)/bin/activate"
-    #python3 "$SCRIPT_DIR/generate_colors_material.py" "${generate_colors_material_args[@]}" \
-    #    > "$STATE_DIR"/user/generated/material_colors.scss.tmp && \
-    #mv "$STATE_DIR"/user/generated/material_colors.scss.tmp "$STATE_DIR"/user/generated/material_colors.scss
-    #"$SCRIPT_DIR"/applycolor.sh
-    #deactivate
-
     # KDE/code/YouTube Music theming is deliberately outside the first preset
     # frame. They are still run for a normal wallpaper switch, but colors-only
     # is a shell-palette transaction and must not fan out into more processes.
