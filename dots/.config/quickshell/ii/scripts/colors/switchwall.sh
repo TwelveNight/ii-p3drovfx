@@ -298,6 +298,10 @@ set_thumbnail_path() {
     update_config_value_if_changed '.background.thumbnailPath' string "$path" '""'
 }
 
+set_wallpaper_engine_id() {
+    update_config_value_if_changed '.background.wallpaperEngineId' string "$1" '""'
+}
+
 categorize_wallpaper() {
     img_cat=$("$SCRIPT_DIR/../ai/gemini-categorize-wallpaper.sh" "$1")
     # notify-send "Wallpaper category" "$img_cat"
@@ -859,6 +863,7 @@ main() {
     color=""
     noswitch_flag=""
     skwd_wall_flag=""
+    skwd_wallpaper_engine_id=""
 
     get_type_from_config() {
         jq -r '.appearance.palette.type' "$SHELL_CONFIG_FILE" 2>/dev/null || echo "auto"
@@ -912,6 +917,10 @@ main() {
                 skwd_wall_flag="1"
                 colors_only_flag="1"
                 shift
+                ;;
+            --wallpaper-engine)
+                skwd_wallpaper_engine_id="${2:-}"
+                shift 2
                 ;;
             --color)
                 if [[ "$2" =~ ^#?[A-Fa-f0-9]{6}$ ]]; then
@@ -1027,8 +1036,13 @@ main() {
     fi
 
     if [[ -n "$skwd_wall_flag" ]]; then
-        disable_wpe_config
-        set_wallpaper_path "$imgpath" "desktop"
+        if [[ -n "$skwd_wallpaper_engine_id" ]]; then
+            enable_wpe_config
+            set_wallpaper_engine_id "$skwd_wallpaper_engine_id"
+        else
+            disable_wpe_config
+            set_wallpaper_path "$imgpath" "desktop"
+        fi
     fi
 
     # If --lightmode is passed and --noswitch is passed:
