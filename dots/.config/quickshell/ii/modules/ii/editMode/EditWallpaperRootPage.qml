@@ -36,19 +36,29 @@ StyledFlickable {
     contentHeight: column.implicitHeight
     clip: true
 
+    Component.onCompleted: Wallpapers.acquireSkwdWallpaperState()
+    Component.onDestruction: Wallpapers.relinquishSkwdWallpaperState()
+
     readonly property var background: Config.options.background
     readonly property bool darkMode: Appearance.m3colors.darkmode
     readonly property bool lockTab: GlobalStates.editLockPreview
     readonly property bool separateLock: root.background.useSeparateLockscreenWallpaper ?? false
     readonly property bool separateLight: root.background.useSeparateLightModeWallpaper ?? false
-    readonly property bool wallpaperEngine: root.background.useWallpaperEngine ?? false
+    readonly property bool wallpaperEngine: !root.lockTarget && !root.ownScreen && !root.lightTarget
+        && Wallpapers.activeUseWallpaperEngine
 
     readonly property bool lockTarget: root.lockTab && root.separateLock
     readonly property bool ownScreen: !root.lockTab && WallpaperLayout.hasOwn(root.screenName)
     readonly property bool lightTarget: !root.lockTarget && !root.ownScreen && root.separateLight && !root.darkMode
     readonly property string targetPath: root.lockTarget
         ? FileUtils.trimFileProtocol(String(root.background.lockscreenWallpaperPath ?? ""))
-        : WallpaperLayout.sourcePathFor(root.screenName)
+        : root.ownScreen ? WallpaperLayout.ownPathFor(root.screenName)
+        : root.lightTarget ? FileUtils.trimFileProtocol(String(root.background.lightModeWallpaperPath ?? ""))
+        : FileUtils.trimFileProtocol(String(Wallpapers.activeWallpaperPath ?? ""))
+    readonly property string previewPath: !root.lockTarget && !root.ownScreen && !root.lightTarget
+        && Wallpapers.activeThumbnailPath !== ""
+        && (root.wallpaperEngine || Wallpapers.isVideoFile(root.targetPath))
+            ? Wallpapers.activeThumbnailPath : root.targetPath
     readonly property string targetLabel: root.lockTarget ? Translation.tr("Lock screen wallpaper")
         : root.ownScreen ? Translation.tr("This screen's own wallpaper")
         : root.lightTarget ? Translation.tr("Light mode wallpaper")
@@ -107,9 +117,9 @@ StyledFlickable {
 
                 Loader {
                     anchors.fill: parent
-                    active: root.targetPath !== "" && !preview.showsEngine
+                    active: root.previewPath !== ""
                     sourceComponent: ThumbnailImage {
-                        sourcePath: root.targetPath
+                        sourcePath: root.previewPath
                         thumbnailService: Wallpapers
                         fillMode: Image.PreserveAspectCrop
                         cache: false
@@ -130,7 +140,7 @@ StyledFlickable {
 
             MaterialSymbol {
                 anchors.centerIn: parent
-                visible: root.targetPath === "" || preview.showsEngine
+                visible: root.previewPath === ""
                 text: root.wallpaperEngine ? "animation" : "wallpaper"
                 iconSize: Appearance.font.pixelSize.huge * 1.5
                 color: Appearance.colors.colOnSurfaceVariant

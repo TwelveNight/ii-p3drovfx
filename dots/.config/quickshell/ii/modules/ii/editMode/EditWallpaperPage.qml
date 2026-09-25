@@ -36,7 +36,7 @@ Item {
         const background = Config.options.background;
         const raw = root.target === "lockscreen" ? background.lockscreenWallpaperPath
             : root.target === "lightmode" ? background.lightModeWallpaperPath
-            : background.wallpaperPath;
+            : Wallpapers.activeWallpaperPath;
         return FileUtils.trimFileProtocol(String(raw ?? ""));
     }
 
@@ -95,11 +95,14 @@ Item {
     // The thumbnails are made once for the size the cells draw at, the same
     // way the selector asks for its own.
     Component.onCompleted: {
+        Wallpapers.acquireSkwdWallpaperState();
         Wallpapers.load();
         const dpr = (QsWindow.window as QsWindow)?.devicePixelRatio ?? 1;
         Wallpapers.generateThumbnail(Images.thumbnailSizeNameForDimensions(
             Math.ceil(root.cellWidth * dpr), Math.ceil(root.cellHeight * dpr)));
     }
+
+    Component.onDestruction: Wallpapers.relinquishSkwdWallpaperState()
 
     GridView {
         id: grid

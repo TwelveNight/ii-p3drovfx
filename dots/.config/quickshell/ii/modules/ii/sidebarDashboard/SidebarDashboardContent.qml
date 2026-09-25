@@ -61,10 +61,18 @@ Item {
     property bool showTrayDialog: false
     property bool wifiDialogStatePublished: false
     property bool bluetoothDialogStatePublished: false
+    property bool wallpaperStateConsumerHeld: false
 
     readonly property bool keyboardContextOpen: root.visible
         && (root.isLoadedOnLeft ? GlobalStates.sidebarLeftOpen : GlobalStates.sidebarRightOpen)
     onKeyboardContextOpenChanged: {
+        if (root.keyboardContextOpen && !root.wallpaperStateConsumerHeld) {
+            Wallpapers.acquireSkwdWallpaperState();
+            root.wallpaperStateConsumerHeld = true;
+        } else if (!root.keyboardContextOpen && root.wallpaperStateConsumerHeld) {
+            Wallpapers.relinquishSkwdWallpaperState();
+            root.wallpaperStateConsumerHeld = false;
+        }
         if (root.keyboardContextOpen) Qt.callLater(root.focusDashboardOnOpen);
     }
     function focusDashboardOnOpen() {
@@ -267,6 +275,10 @@ Item {
     readonly property bool isDynamicIslandBottom: !BarPlacement.vertical && BarPlacement.bottom && BarInteraction.cornerStyle === 3
 
     Component.onCompleted: {
+        if (root.keyboardContextOpen && !root.wallpaperStateConsumerHeld) {
+            Wallpapers.acquireSkwdWallpaperState();
+            root.wallpaperStateConsumerHeld = true;
+        }
         Qt.callLater(root.focusDashboardOnOpen);
         if (GlobalStates.requestVolumeDialog) {
             root.showAudioOutputDialog = true;
@@ -279,6 +291,8 @@ Item {
     }
 
     Component.onDestruction: {
+        if (root.wallpaperStateConsumerHeld)
+            Wallpapers.relinquishSkwdWallpaperState();
         root.publishWifiDialogState(false);
         root.publishBluetoothDialogState(false);
     }
@@ -765,7 +779,12 @@ Item {
                     if (Config.options.sidebar.useCustomBanner) {
                         return Config.options.sidebar.bannerImage || `${Directories.assetsPath}/images/default_wallpaper.png`;
                     }
-                    return Config.options.background.wallpaperPath || "";
+                    const activePath = Wallpapers.activeWallpaperPath;
+                    if (Wallpapers.activeThumbnailPath !== ""
+                            && (Wallpapers.activeUseWallpaperEngine || Wallpapers.isVideoFile(activePath))) {
+                        return Wallpapers.activeThumbnailPath;
+                    }
+                    return activePath;
                 }
 
                 readonly property string cleanBannerSource: {
