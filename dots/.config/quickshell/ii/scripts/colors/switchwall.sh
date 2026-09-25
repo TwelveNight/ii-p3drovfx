@@ -328,7 +328,13 @@ update_skwd_wallpaper_state() {
     fi
     if [[ $? -eq 0 ]]; then
         if ! cmp -s "$temp_file" "$state_file"; then
-            mv -f -- "$temp_file" "$state_file"
+            # FileView watches this dedicated state file. Replacing it with mv
+            # leaves some Quickshell versions watching the old inode, so later
+            # skwd changes never reach Settings. Updating the existing file is
+            # safe here: the hook serializes writers with skwd-wall-theme.lock,
+            # and readers retry on the following change if they catch a write.
+            cp -- "$temp_file" "$state_file"
+            rm -f -- "$temp_file"
         else
             rm -f -- "$temp_file"
         fi

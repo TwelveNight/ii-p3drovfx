@@ -15,6 +15,26 @@ import Quickshell.Hyprland
 MouseArea {
     id: wallpaperSelectorContent
 
+    property bool wallpaperStateConsumerHeld: false
+
+    function syncWallpaperStateConsumer() {
+        const shouldHold = wallpaperSelectorContent.visible
+            && (!wallpaperSelectorContent.compact || wallpaperSelectorContent.active);
+        if (shouldHold && !wallpaperSelectorContent.wallpaperStateConsumerHeld) {
+            Wallpapers.acquireSkwdWallpaperState();
+            wallpaperSelectorContent.wallpaperStateConsumerHeld = true;
+        } else if (!shouldHold && wallpaperSelectorContent.wallpaperStateConsumerHeld) {
+            Wallpapers.relinquishSkwdWallpaperState();
+            wallpaperSelectorContent.wallpaperStateConsumerHeld = false;
+        }
+    }
+
+    Component.onDestruction: {
+        if (wallpaperSelectorContent.wallpaperStateConsumerHeld)
+            Wallpapers.relinquishSkwdWallpaperState();
+    }
+    onVisibleChanged: wallpaperSelectorContent.syncWallpaperStateConsumer()
+
     /**
      * The same browser, laid out to live inside the Dynamic Island.
      *
@@ -257,7 +277,7 @@ MouseArea {
         if (GlobalStates.wallpaperSelectorTarget === "lightmode") {
             return FileUtils.trimFileProtocol(String(background.lightModeWallpaperPath || ""));
         }
-        return FileUtils.trimFileProtocol(String(background.wallpaperPath || ""));
+        return FileUtils.trimFileProtocol(String(Wallpapers.activeWallpaperPath || ""));
     }
 
     function modelIsApplied(modelData) {
@@ -422,6 +442,7 @@ MouseArea {
     }
 
     Component.onCompleted: {
+        wallpaperSelectorContent.syncWallpaperStateConsumer()
         wallpaperSelectorContent.scheduleThumbnailDiagnostics()
         // The host's handoff rides on the loader's visibility edge; when this
         // component is created already on screen there is no edge to catch, so
@@ -429,7 +450,10 @@ MouseArea {
         if (wallpaperSelectorContent.compact && wallpaperSelectorContent.active)
             Qt.callLater(() => wallpaperSelectorContent.takeKeyboard())
     }
-    onActiveChanged: if (active) Qt.callLater(() => wallpaperSelectorContent.takeKeyboard())
+    onActiveChanged: {
+        wallpaperSelectorContent.syncWallpaperStateConsumer()
+        if (active) Qt.callLater(() => wallpaperSelectorContent.takeKeyboard())
+    }
     onFavModeChanged: wallpaperSelectorContent.scheduleThumbnailDiagnostics()
     onBrowserModeChanged: wallpaperSelectorContent.scheduleThumbnailDiagnostics()
 

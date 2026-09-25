@@ -54,12 +54,92 @@ Singleton {
     property string directoryError: ""
     readonly property bool directoryLoading: folderModel.status === FolderListModel.Loading
 
+    // Direct skwd-wall actions do not rewrite II's config.json: replacing that
+    // file forces Quickshell to rebuild the full Config tree.  The event bridge
+    // publishes this small record instead, so lightweight consumers such as the
+    // Settings wallpaper preview can still follow the wallpaper on screen.
+    property var skwdWallpaperState: ({})
+    property int skwdWallpaperStateConsumers: 0
+    readonly property bool activeUseWallpaperEngine: skwdWallpaperState.useWallpaperEngine !== undefined
+        ? skwdWallpaperState.useWallpaperEngine === true
+        : (Config.options?.background?.useWallpaperEngine === true)
+    readonly property string activeWallpaperPath: skwdWallpaperState.wallpaperPath !== undefined
+        ? String(skwdWallpaperState.wallpaperPath || "")
+        : String(Config.options?.background?.wallpaperPath || "")
+    readonly property string activeWallpaperEngineId: skwdWallpaperState.wallpaperEngineId !== undefined
+        ? String(skwdWallpaperState.wallpaperEngineId || "")
+        : String(Config.options?.background?.wallpaperEngineId || "")
+    readonly property string activeThumbnailPath: skwdWallpaperState.thumbnailPath !== undefined
+        ? String(skwdWallpaperState.thumbnailPath || "")
+        : String(Config.options?.background?.thumbnailPath || "")
+
     signal changed()
     signal thumbnailGenerated(directory: string)
     signal thumbnailGeneratedFile(filePath: string)
     signal sortChanged()
 
     function load () {} // For forcing initialization
+
+    function parseSkwdWallpaperState() {
+        try {
+            const raw = skwdWallpaperStateFile.text().trim();
+            const parsed = raw ? JSON.parse(raw) : ({});
+            root.skwdWallpaperState = parsed && typeof parsed === "object" ? parsed : ({});
+        } catch (e) {
+            root.skwdWallpaperState = ({});
+        }
+    }
+
+    function acquireSkwdWallpaperState() {
+        root.skwdWallpaperStateConsumers++;
+        root.refreshSkwdWallpaperState();
+    }
+
+    function relinquishSkwdWallpaperState() {
+        if (root.skwdWallpaperStateConsumers > 0)
+            root.skwdWallpaperStateConsumers--;
+    }
+
+    function refreshSkwdWallpaperState() {
+        skwdWallpaperStateFile.reload();
+        skwdWallpaperStateReadTimer.restart();
+    }
+
+    Timer {
+        id: skwdWallpaperStateReadTimer
+        interval: 100
+        repeat: false
+        onTriggered: root.parseSkwdWallpaperState()
+    }
+
+    // QFileSystemWatcher can keep following the old inode when an external
+    // process replaces a file. Poll only while a wallpaper-state consumer is
+    // visible; the file is tiny and the timer stops when all consumers close.
+    Timer {
+        interval: 750
+        repeat: true
+        running: root.skwdWallpaperStateConsumers > 0
+        triggeredOnStart: true
+        onTriggered: root.refreshSkwdWallpaperState()
+    }
+
+    FileView {
+        id: skwdWallpaperStateFile
+        path: Qt.resolvedUrl(`${Directories.wallpaperThemeStatePath}/wallpaper-state.json`)
+        watchChanges: true
+        printErrors: false
+
+        onFileChanged: {
+            this.reload();
+            skwdWallpaperStateReadTimer.restart();
+        }
+        onLoaded: root.parseSkwdWallpaperState()
+        onLoadedChanged: {
+            if (skwdWallpaperStateFile.loaded)
+                root.parseSkwdWallpaperState();
+        }
+        onLoadFailed: root.skwdWallpaperState = ({})
+    }
 
     function normalizeSortField(value) {
         const field = String(value || "modified");
