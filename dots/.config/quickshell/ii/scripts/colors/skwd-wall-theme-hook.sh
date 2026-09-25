@@ -15,7 +15,7 @@ else
     state_key="path:$path"
 fi
 
-state_dir="${XDG_STATE_HOME:-$HOME/.local/state}/quickshell/user/generated"
+state_dir="${XDG_STATE_HOME:-$HOME/.local/state}/ii-skwd-wall"
 lock_file="$state_dir/skwd-wall-theme.lock"
 last_file="$state_dir/skwd-wall-theme-path"
 mkdir -p "$state_dir"
