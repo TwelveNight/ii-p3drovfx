@@ -189,11 +189,15 @@ PanelWindow {
     // A mapped fullscreen layer costs a swapchain plus a render thread even when every widget on it
     // is hidden. Only keep it mapped while at least one widget is actually shown - the same rule
     // WidgetDelegate's FadeLoader uses - and for the whole lock/unlock sequence so lock-only widgets
-    // fade in and out exactly as before. Setups with an always-visible widget never unmap.
+    // fade in and out exactly as before. Dynamic skwd wallpapers are the one exception: their
+    // renderer can sit above the Background layer, so this Bottom-layer canvas must stay mapped to
+    // receive the desktop context menu and hand it to the existing canvas handler.
     readonly property bool anyWidgetShown: {
         // Edit Mode needs the surface up even over an empty desktop: the
         // marquee, and later the drop targets, live on it.
         if (GlobalStates.editMode)
+            return true;
+        if (Wallpapers.videoWallpaperActive)
             return true;
         if (bgWidgetsWindow.canvasOverlay !== null)
             return true;

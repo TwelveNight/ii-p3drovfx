@@ -402,6 +402,20 @@ Singleton {
         root.changed();
     }
 
+    // Presets write config.json directly, so they do not pass through select()
+    // or apply().  Keep the renderer authoritative but explicitly hand its new
+    // configured source to skwd once the preset reload has settled.
+    function applyConfiguredDesktopWallpaper() {
+        const background = Config.options?.background;
+        if (!background)
+            return;
+        const source = background.useWallpaperEngine
+            ? String(background.wallpaperEngineId || "")
+            : String(background.wallpaperPath || "");
+        if (source !== "")
+            root.apply(source);
+    }
+
     function applyLockscreen(path, darkMode = Appearance.m3colors.darkmode) {
         if (!path || path.length === 0) return;
         let optionsChanged = false;
@@ -438,14 +452,10 @@ Singleton {
             }
         }
         if (optionsChanged) Config.saveOptionsNow();
-        const requestSeq = ++root._wallpaperRequestSeq;
-        const envBinPath = `${FileUtils.trimFileProtocol(Directories.home)}/.local/bin:${FileUtils.trimFileProtocol(Directories.home)}/.cargo/bin:/usr/local/bin:/usr/bin:/bin`;
-        Quickshell.execDetached([
-            "env", "-u", "LD_LIBRARY_PATH", "-u", "PYTHONHOME", "-u", "PYTHONPATH",
-            `PATH=${envBinPath}`, "bash", Directories.wallpaperSwitchScriptPath,
-            "--mode", "light", "--image", path, "--lightmode",
-            "--request-seq", String(requestSeq)
-        ]);
+        // This used to start the legacy renderer directly.  The light-mode
+        // selector is still a desktop wallpaper action, so it must go through
+        // the same skwd backend as every other desktop picker.
+        Quickshell.execDetached(["skwd-helm", "apply", path]);
         root.changed();
     }
 
@@ -493,9 +503,14 @@ Singleton {
         if (Config.options?.background?.useSeparateLightModeWallpaper && !Appearance.m3colors.darkmode) {
             root.applyLightModeWallpaper(cleanPath);
         } else {
-            Quickshell.execDetached([Directories.wallpaperSwitchScriptPath, "--mode", darkMode ? "dark" : "light", "--image", cleanPath, "--lightmode", "--noswitch",
-                "--request-seq", String(++root._wallpaperRequestSeq)]);
-            root.changed()
+            // Saving a future light wallpaper is metadata only.  It must not
+            // disturb the currently-rendered desktop or revive mpvpaper/WPE.
+            if (Config.options?.background
+                    && String(Config.options.background.lightModeWallpaperPath || "") !== cleanPath) {
+                Config.options.background.lightModeWallpaperPath = cleanPath;
+                Config.saveOptionsNow();
+            }
+            root.changed();
         }
     }
 
