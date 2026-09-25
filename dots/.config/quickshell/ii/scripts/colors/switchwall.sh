@@ -7,6 +7,9 @@ XDG_STATE_HOME="${XDG_STATE_HOME:-$HOME/.local/state}"
 CONFIG_DIR="$XDG_CONFIG_HOME/quickshell/$QUICKSHELL_CONFIG_NAME"
 CACHE_DIR="$XDG_CACHE_HOME/quickshell"
 STATE_DIR="$XDG_STATE_HOME/quickshell"
+SKWD_THEME_STATE_DIR="$XDG_STATE_HOME/ii-skwd-wall"
+TERMINAL_THEME_DIR="$STATE_DIR/user/generated/terminal"
+TERMINAL_MATERIAL_FILE="$TERMINAL_THEME_DIR/material_colors.scss"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SHELL_CONFIG_FILE="$XDG_CONFIG_HOME/illogical-impulse/config.json"
 CONFIG_LOCK_FILE="$STATE_DIR/config-write.lock"
@@ -311,7 +314,7 @@ update_skwd_wallpaper_state() {
     local path="$1"
     local we_id="$2"
     local thumbnail="$3"
-    local state_file="$STATE_DIR/user/generated/skwd-wallpaper-state.json"
+    local state_file="$SKWD_THEME_STATE_DIR/wallpaper-state.json"
     local temp_file
 
     mkdir -p "$(dirname "$state_file")" 2>/dev/null || return 1
@@ -356,7 +359,11 @@ switch() {
     # increasing in click order, since QML dispatch is single-threaded. Direct
     # callers without a sequence receive the next token under the same lock, so
     # they cannot be rejected just because an older QML token uses timestamps.
-    request_token_file="$STATE_DIR/user/generated/.preview_request_token"
+    if [[ -n "$colors_only_flag" ]]; then
+        request_token_file="$SKWD_THEME_STATE_DIR/request_token"
+    else
+        request_token_file="$STATE_DIR/user/generated/.preview_request_token"
+    fi
     mkdir -p "$(dirname "$request_token_file")"
     if [[ -n "$request_seq_flag" ]]; then
         my_request_token="$request_seq_flag"
@@ -734,8 +741,6 @@ done"
             # a lockscreen or light-mode pick must not repaint the desktop preview.
             if is_desktop_target && [[ "$colors_only_flag" != "1" && "$noswitch_flag" != "1" ]]; then
                 set_thumbnail_path "$thumbnail"
-            elif [[ -n "$skwd_wall_flag" ]]; then
-                set_thumbnail_path "$thumbnail"
             fi
 
             if [ -f "$thumbnail" ]; then
@@ -798,7 +803,11 @@ done"
     fi
     generate_colors_material_args+=(--scheme "$type_flag")
     generate_colors_material_args+=(--termscheme "$terminalscheme" --blend_bg_fg)
-    generate_colors_material_args+=(--cache "$STATE_DIR/user/generated/color.txt")
+    if [[ -n "$colors_only_flag" ]]; then
+        generate_colors_material_args+=(--cache "$SKWD_THEME_STATE_DIR/color.txt")
+    else
+        generate_colors_material_args+=(--cache "$STATE_DIR/user/generated/color.txt")
+    fi
 
     # Preset application already has the mode/config state in place. Avoid the
     # synchronous GNOME settings calls and cache-directory setup on the first
@@ -836,17 +845,40 @@ done"
     else
         matugen_exit_code=0
         matugen_config_args=()
+        atomic_colors_file=""
+        atomic_matugen_config=""
         if [[ -n "$colors_only_flag" && -f "$SHELL_MATUGEN_CONFIG" ]]; then
             # The normal config fans out to GTK, Hyprland, terminals, yazi,
             # browsers and other integrations. The first preset frame only
-            # needs the m3colors template that Quickshell watches.
-            matugen_config_args+=(--config "$SHELL_MATUGEN_CONFIG")
+            # needs the m3colors template that Quickshell watches. Generate it
+            # away from the watched path, then publish it with one atomic rename:
+            # writing colors.json in place makes FileView reload partial and
+            # completed contents and can peg the QML thread for several seconds.
+            mkdir -p "$STATE_DIR/user/generated" "$SKWD_THEME_STATE_DIR"
+            atomic_colors_file=$(mktemp "$SKWD_THEME_STATE_DIR/colors.json.tmp.XXXXXX")
+            atomic_matugen_config=$(mktemp "${TMPDIR:-/tmp}/ii-matugen-shell.XXXXXX.toml")
+            sed "s#output_path = '.*colors.json'#output_path = '$atomic_colors_file'#" \
+                "$SHELL_MATUGEN_CONFIG" > "$atomic_matugen_config"
+            matugen_config_args+=(--config "$atomic_matugen_config")
         fi
         if matugen "${matugen_config_args[@]}" "${matugen_args[@]}"; then
-            rm -f "$STATE_DIR/matugen_error_notified"
+            if [[ -n "$atomic_colors_file" ]]; then
+                if jq -e 'type == "object" and length > 0' "$atomic_colors_file" >/dev/null 2>&1; then
+                    mv -f -- "$atomic_colors_file" "$STATE_DIR/user/generated/colors.json"
+                else
+                    matugen_exit_code=1
+                    rm -f -- "$atomic_colors_file"
+                fi
+            fi
+            [[ $matugen_exit_code -eq 0 ]] && rm -f "$STATE_DIR/matugen_error_notified"
         else
             matugen_exit_code=$?
+        fi
+        rm -f -- "$atomic_matugen_config"
+        if [[ $matugen_exit_code -ne 0 ]]; then
+            rm -f -- "$atomic_colors_file"
             report_matugen_failure "switchwall.sh" "$matugen_exit_code"
+            return "$matugen_exit_code"
         fi
         if [[ "$type_flag" == "scheme-intense" ]]; then
             echo "[switchwall.sh] Applying intense surface boost to colors.json (mode: $mode_flag)" >&2
@@ -854,6 +886,7 @@ done"
         fi
         if [[ -z "$colors_only_flag" && "$(jq -r '.appearance.icons.enableThemed' "$SHELL_CONFIG_FILE" 2>/dev/null)" == "true" ]]; then python3 "$HOME/.config/quickshell/ii/scripts/colors/recolor_icons.py"; fi
         source "$(eval echo $ILLOGICAL_IMPULSE_VIRTUAL_ENV)/bin/activate"
+        mkdir -p "$TERMINAL_THEME_DIR"
         preview_args=()
         if [[ -z "$colors_only_flag" ]]; then
             preview_args+=(
@@ -866,10 +899,10 @@ done"
             # colors.json is ready after matugen. Generate terminal colors only
             # after Quickshell can repaint, and discard an outdated request.
             (
-                temp_material="$STATE_DIR/user/generated/material_colors.scss.tmp.$my_request_token"
+                temp_material="$TERMINAL_THEME_DIR/material_colors.scss.tmp.$my_request_token"
                 if nice -n 10 python3 "$SCRIPT_DIR/generate_colors_material.py" "${generate_colors_material_args[@]}" > "$temp_material" \
                     && [[ "$(cat "$request_token_file" 2>/dev/null)" == "$my_request_token" ]]; then
-                    mv "$temp_material" "$STATE_DIR/user/generated/material_colors.scss"
+                    mv "$temp_material" "$TERMINAL_MATERIAL_FILE"
                     nice -n 10 "$SCRIPT_DIR/applycolor.sh"
                 else
                     rm -f -- "$temp_material"
@@ -877,12 +910,12 @@ done"
                 deactivate
             ) >/dev/null 2>&1 & disown
         elif python3 "$SCRIPT_DIR/generate_colors_material.py" "${generate_colors_material_args[@]}" "${preview_args[@]}" \
-            > "$STATE_DIR"/user/generated/material_colors.scss.tmp; then
-            mv "$STATE_DIR"/user/generated/material_colors.scss.tmp "$STATE_DIR"/user/generated/material_colors.scss
+            > "$TERMINAL_MATERIAL_FILE.tmp"; then
+            mv "$TERMINAL_MATERIAL_FILE.tmp" "$TERMINAL_MATERIAL_FILE"
             deactivate
             "$SCRIPT_DIR"/applycolor.sh
         else
-            rm -f "$STATE_DIR"/user/generated/material_colors.scss.tmp
+            rm -f "$TERMINAL_MATERIAL_FILE.tmp"
             echo "[switchwall.sh] Color generation skipped; preserving the previous terminal palette." >&2
             deactivate
         fi

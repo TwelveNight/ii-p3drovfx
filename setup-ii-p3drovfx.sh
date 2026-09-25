@@ -2239,6 +2239,33 @@ start_quickshell() {
     return 0
 }
 
+# Optional integrations shipped by a branch must be activated after the live
+# tree has been swapped into place. A branch without this service may stop it;
+# returning to the personal overlay must therefore reinstall and start it,
+# rather than relying on state left by an earlier deployment.
+sync_branch_user_services() {
+    local skwd_unit="$TARGET_DIR/scripts/colors/ii-skwd-wall-theme.service"
+    [[ -f "$skwd_unit" ]] || return 0
+    have systemctl || {
+        ui_warn "systemctl is unavailable — start ii-skwd-wall-theme.service manually."
+        return 0
+    }
+
+    local user_unit_dir="${XDG_CONFIG_HOME}/systemd/user"
+    local user_runtime="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+    local user_bus="${DBUS_SESSION_BUS_ADDRESS:-unix:path=$user_runtime/bus}"
+    mkdir -p "$user_unit_dir"
+    install -m 0644 "$skwd_unit" "$user_unit_dir/ii-skwd-wall-theme.service"
+    if env XDG_RUNTIME_DIR="$user_runtime" DBUS_SESSION_BUS_ADDRESS="$user_bus" \
+            systemctl --user daemon-reload >>"$LOG_FILE" 2>&1 &&
+        env XDG_RUNTIME_DIR="$user_runtime" DBUS_SESSION_BUS_ADDRESS="$user_bus" \
+            systemctl --user enable --now ii-skwd-wall-theme.service >>"$LOG_FILE" 2>&1; then
+        ui_ok "Started" "skwd-wall theme bridge"
+    else
+        ui_warn "Could not start ii-skwd-wall-theme.service — run systemctl --user enable --now ii-skwd-wall-theme.service."
+    fi
+}
+
 open_welcome_after_start() {
     local attempt
     local ipc_bin=""
@@ -2688,6 +2715,7 @@ apply_config() {
 
     handle_base_config "$verb" "$prev_fork" "$fork"
 
+    sync_branch_user_services
     start_quickshell
 
     # After the restart on purpose. A helper build takes about a minute, and the
