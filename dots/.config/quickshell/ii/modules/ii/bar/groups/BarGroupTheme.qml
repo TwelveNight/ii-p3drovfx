@@ -1,6 +1,7 @@
 import QtQuick
 import qs
 import qs.modules.common
+import qs.modules.common.functions
 import qs.modules.ii.bar.shared
 
 // Computes radius and color values for a BarGroup.
