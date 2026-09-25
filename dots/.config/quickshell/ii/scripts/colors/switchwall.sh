@@ -302,6 +302,39 @@ set_wallpaper_engine_id() {
     update_config_value_if_changed '.background.wallpaperEngineId' string "$1" '""'
 }
 
+# skwd-walld has already committed the visual wallpaper. Never rewrite II's
+# config.json from this event bridge: even one replacement makes Quickshell
+# rebuild its whole Config/FileView tree, which stalls the shell for seconds.
+# Normal II and preset actions persist their chosen value before calling skwd;
+# this small state record is for bridge consumers and direct skwd calls only.
+update_skwd_wallpaper_state() {
+    local path="$1"
+    local we_id="$2"
+    local thumbnail="$3"
+    local state_file="$STATE_DIR/user/generated/skwd-wallpaper-state.json"
+    local temp_file
+
+    mkdir -p "$(dirname "$state_file")" 2>/dev/null || return 1
+    temp_file=$(mktemp "${state_file}.tmp.XXXXXX") || return 1
+    if [[ -n "$we_id" ]]; then
+        jq -n --arg id "$we_id" --arg thumbnail "$thumbnail" \
+            '{useWallpaperEngine: true, wallpaperEngineId: $id, thumbnailPath: $thumbnail}' > "$temp_file"
+    else
+        jq -n --arg path "$path" --arg thumbnail "$thumbnail" \
+            '{useWallpaperEngine: false, wallpaperPath: $path, thumbnailPath: $thumbnail}' > "$temp_file"
+    fi
+    if [[ $? -eq 0 ]]; then
+        if ! cmp -s "$temp_file" "$state_file"; then
+            mv -f -- "$temp_file" "$state_file"
+        else
+            rm -f -- "$temp_file"
+        fi
+    else
+        rm -f -- "$temp_file"
+        return 1
+    fi
+}
+
 categorize_wallpaper() {
     img_cat=$("$SCRIPT_DIR/../ai/gemini-categorize-wallpaper.sh" "$1")
     # notify-send "Wallpaper category" "$img_cat"
@@ -402,11 +435,19 @@ switch() {
         wpe_assets=$(jq -r '.background.wallpaperEngineAssetsPath' "$SHELL_CONFIG_FILE" 2>/dev/null || echo "")
 
         is_wpe=0
-        if [[ "$use_wpe" == "true" ]]; then
+        if [[ "$use_wpe" == "true" || ( -n "$skwd_wall_flag" && -n "$skwd_wallpaper_engine_id" ) ]]; then
             is_wpe=1
         fi
 
         if [[ $is_wpe -eq 1 ]]; then
+            # skwd supplies a stable Wallpaper Engine thumbnail. Use it
+            # directly instead of entering the legacy renderer compatibility
+            # path, and commit all II metadata with one config replacement.
+            if [[ -n "$skwd_wall_flag" && -n "$skwd_wallpaper_engine_id" ]]; then
+                update_skwd_wallpaper_state "" "$skwd_wallpaper_engine_id" "$imgpath"
+                matugen_args+=(image "$imgpath")
+                generate_colors_material_args=(--path "$imgpath")
+            else
             # Auto-detect wpe_assets if empty or invalid
             if [[ -z "$wpe_assets" || ! -d "$wpe_assets" ]]; then
                 for candidate_assets in \
@@ -589,6 +630,7 @@ done"
                     fi
                 fi
             fi
+            fi
         else
             # If not using Wallpaper Engine, make sure it is disabled in config.
             # A colors-only pass must not rewrite the config or cause another
@@ -697,6 +739,7 @@ done"
             fi
 
             if [ -f "$thumbnail" ]; then
+                [[ -n "$skwd_wall_flag" ]] && update_skwd_wallpaper_state "$imgpath" "" "$thumbnail"
                 matugen_args+=(image "$thumbnail")
                 generate_colors_material_args=(--path "$thumbnail")
                 if is_desktop_target && [[ "$colors_only_flag" != "1" && "$noswitch_flag" != "1" ]]; then
@@ -715,9 +758,7 @@ done"
             fi
             # skwd's static image has no video preview. Clear any thumbnail
             # left by the previous video so II metadata remains truthful.
-            if [[ -n "$skwd_wall_flag" ]]; then
-                set_thumbnail_path ""
-            fi
+            [[ -n "$skwd_wall_flag" ]] && update_skwd_wallpaper_state "$imgpath" "" ""
             matugen_args+=(image "$imgpath")
             generate_colors_material_args=(--path "$imgpath")
             # Update wallpaper path in config
@@ -821,15 +862,30 @@ done"
                 --request-value "$my_request_token"
             )
         fi
-        if python3 "$SCRIPT_DIR/generate_colors_material.py" "${generate_colors_material_args[@]}" "${preview_args[@]}" \
+        if [[ -n "$colors_only_flag" ]]; then
+            # colors.json is ready after matugen. Generate terminal colors only
+            # after Quickshell can repaint, and discard an outdated request.
+            (
+                temp_material="$STATE_DIR/user/generated/material_colors.scss.tmp.$my_request_token"
+                if nice -n 10 python3 "$SCRIPT_DIR/generate_colors_material.py" "${generate_colors_material_args[@]}" > "$temp_material" \
+                    && [[ "$(cat "$request_token_file" 2>/dev/null)" == "$my_request_token" ]]; then
+                    mv "$temp_material" "$STATE_DIR/user/generated/material_colors.scss"
+                    nice -n 10 "$SCRIPT_DIR/applycolor.sh"
+                else
+                    rm -f -- "$temp_material"
+                fi
+                deactivate
+            ) >/dev/null 2>&1 & disown
+        elif python3 "$SCRIPT_DIR/generate_colors_material.py" "${generate_colors_material_args[@]}" "${preview_args[@]}" \
             > "$STATE_DIR"/user/generated/material_colors.scss.tmp; then
             mv "$STATE_DIR"/user/generated/material_colors.scss.tmp "$STATE_DIR"/user/generated/material_colors.scss
+            deactivate
+            "$SCRIPT_DIR"/applycolor.sh
         else
             rm -f "$STATE_DIR"/user/generated/material_colors.scss.tmp
             echo "[switchwall.sh] Color generation skipped; preserving the previous terminal palette." >&2
+            deactivate
         fi
-        deactivate
-        "$SCRIPT_DIR"/applycolor.sh
     fi
 
 
@@ -1035,16 +1091,6 @@ main() {
         imgpath="$CONFIG_DIR/assets/images/default_wallpaper.png"
     fi
 
-    if [[ -n "$skwd_wall_flag" ]]; then
-        if [[ -n "$skwd_wallpaper_engine_id" ]]; then
-            enable_wpe_config
-            set_wallpaper_engine_id "$skwd_wallpaper_engine_id"
-        else
-            disable_wpe_config
-            set_wallpaper_path "$imgpath" "desktop"
-        fi
-    fi
-
     # If --lightmode is passed and --noswitch is passed:
     # Only save to config without running matugen or changing theme colors
     if [[ -n "$lightmode_flag" && -n "$noswitch_flag" ]]; then
@@ -1066,7 +1112,7 @@ main() {
 
     # Only clear accent color if a NEW image is provided and noswitch is NOT set
     current_wallpaper=$(jq -r '.background.wallpaperPath' "$SHELL_CONFIG_FILE" 2>/dev/null || echo "")
-    if [[ -n "$imgpath" && -z "$noswitch_flag" && "$imgpath" != "$current_wallpaper" ]]; then
+    if [[ -z "$skwd_wall_flag" && -n "$imgpath" && -z "$noswitch_flag" && "$imgpath" != "$current_wallpaper" ]]; then
         set_accent_color ""
         color_flag=""
         color=""
