@@ -616,7 +616,10 @@ PanelWindow {
             id: wallpaperImage
             // The skwd-paper layer is the sole desktop renderer. II still
             // draws this image while locked, where it supplies the lock view.
-            visible: GlobalStates.screenLocked
+            // Edit Mode's lockscreen tab also shows the lock palette. Draw the
+            // matching wallpaper there; otherwise selecting a new lock image
+            // only appears to change its colors until the session is locked.
+            visible: GlobalStates.lockLookActive
             overviewController: overviewController
             screen: bgRoot.screen
             wallpaperPath: bgRoot.wallpaperPath

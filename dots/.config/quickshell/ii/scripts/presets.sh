@@ -92,7 +92,7 @@ apply_colors() {
         "${nice_cmd[@]}" "$SCRIPTS_DIR/colors/switchwall.sh" --colors-only --noswitch
         sleep 2
         [[ "$(cat "$token_file" 2>/dev/null)" == "$token" ]] || exit 0
-        "${nice_cmd[@]}" "$SCRIPTS_DIR/colors/switchwall.sh" --noswitch
+        "${nice_cmd[@]}" "$SCRIPTS_DIR/colors/switchwall.sh" --noswitch --preset-apps-only
     ) > /tmp/presets_switchwall.log 2>&1 &
 }
 

@@ -60,6 +60,7 @@ Singleton {
     // Settings wallpaper preview can still follow the wallpaper on screen.
     property var skwdWallpaperState: ({})
     property int skwdWallpaperStateConsumers: 0
+    property string _skwdWallpaperStateRaw: ""
     readonly property bool activeUseWallpaperEngine: skwdWallpaperState.useWallpaperEngine !== undefined
         ? skwdWallpaperState.useWallpaperEngine === true
         : (Config.options?.background?.useWallpaperEngine === true)
@@ -83,16 +84,21 @@ Singleton {
     function parseSkwdWallpaperState() {
         try {
             const raw = skwdWallpaperStateFile.text().trim();
+            if (raw === root._skwdWallpaperStateRaw)
+                return;
             const parsed = raw ? JSON.parse(raw) : ({});
+            root._skwdWallpaperStateRaw = raw;
             root.skwdWallpaperState = parsed && typeof parsed === "object" ? parsed : ({});
         } catch (e) {
+            root._skwdWallpaperStateRaw = "";
             root.skwdWallpaperState = ({});
         }
     }
 
     function acquireSkwdWallpaperState() {
         root.skwdWallpaperStateConsumers++;
-        root.refreshSkwdWallpaperState();
+        if (root.skwdWallpaperStateConsumers === 1)
+            root.refreshSkwdWallpaperState();
     }
 
     function relinquishSkwdWallpaperState() {
@@ -138,7 +144,12 @@ Singleton {
             if (skwdWallpaperStateFile.loaded)
                 root.parseSkwdWallpaperState();
         }
-        onLoadFailed: root.skwdWallpaperState = ({})
+        onLoadFailed: {
+            if (root._skwdWallpaperStateRaw !== "") {
+                root._skwdWallpaperStateRaw = "";
+                root.skwdWallpaperState = ({});
+            }
+        }
     }
 
     function normalizeSortField(value) {
@@ -511,7 +522,7 @@ Singleton {
         // and terminal-theme pipeline. A lockscreen pick owns only the
         // separate lockscreen palette below.
         Quickshell.execDetached([
-            "env", "-u", "LD_LIBRARY_PATH", "-u", "PYTHONHOME", "-u", "PYTHONPATH",
+            "nice", "-n", "10", "env", "-u", "LD_LIBRARY_PATH", "-u", "PYTHONHOME", "-u", "PYTHONPATH",
             `PATH=${envBinPath}`, "bash", Directories.generateLockscreenColorsScriptPath,
             "--image", path, "--mode", darkMode ? "dark" : "light"
         ]);
@@ -789,7 +800,7 @@ Singleton {
                 // File doesn't exist: generate lockscreen colors in background
                 const lockPath = Config.options.background.lockscreenWallpaperPath;
                 const mode = Appearance.m3colors.darkmode ? "dark" : "light";
-                Quickshell.execDetached(["bash", Directories.generateLockscreenColorsScriptPath, "--image", lockPath, "--mode", mode]);
+                Quickshell.execDetached(["nice", "-n", "10", "bash", Directories.generateLockscreenColorsScriptPath, "--image", lockPath, "--mode", mode]);
             }
         }
     }

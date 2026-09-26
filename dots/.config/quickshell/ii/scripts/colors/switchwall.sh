@@ -845,8 +845,20 @@ done"
     fi
 
     if [[ -n "$theme_file" ]]; then
-        mkdir -p "$(dirname "$STATE_DIR/user/generated/colors.json")"
-        cp "$theme_file" "$STATE_DIR/user/generated/colors.json"
+        if [[ -z "$preset_apps_only_flag" ]]; then
+            mkdir -p "$STATE_DIR/user/generated" "$SKWD_THEME_STATE_DIR"
+            local theme_colors_file
+            theme_colors_file=$(mktemp "$SKWD_THEME_STATE_DIR/colors.json.tmp.XXXXXX")
+            if ! cp -- "$theme_file" "$theme_colors_file"; then
+                rm -f -- "$theme_colors_file"
+                return 1
+            fi
+            if cmp -s -- "$theme_colors_file" "$STATE_DIR/user/generated/colors.json"; then
+                rm -f -- "$theme_colors_file"
+            else
+                mv -f -- "$theme_colors_file" "$STATE_DIR/user/generated/colors.json"
+            fi
+        fi
         rm -f "$STATE_DIR/matugen_error_notified"
         echo "[switchwall.sh] Applied theme: $type_flag"
         if [[ -z "$colors_only_flag" && "$(jq -r '.appearance.icons.enableThemed' "$SHELL_CONFIG_FILE" 2>/dev/null)" == "true" ]]; then python3 "$HOME/.config/quickshell/ii/scripts/colors/recolor_icons.py"; fi
@@ -855,7 +867,7 @@ done"
         matugen_exit_code=0
         atomic_colors_file=""
         atomic_matugen_config=""
-        if [[ -f "$SHELL_MATUGEN_CONFIG" ]]; then
+        if [[ -f "$SHELL_MATUGEN_CONFIG" && -z "$preset_apps_only_flag" ]]; then
             # Quickshell watches colors.json. Always publish that one template
             # atomically, even when the normal Matugen config also updates
             # external consumers such as GTK and Hyprland.
@@ -867,10 +879,24 @@ done"
         fi
         if [[ -z "$colors_only_flag" ]] && ! matugen "${matugen_args[@]}"; then
             matugen_exit_code=1
+        elif [[ -n "$preset_apps_only_flag" ]]; then
+            # The earlier colors-only pass has already published colors.json.
+            # App templates above still run, but do not generate the shell
+            # palette again and invalidate all its bindings a second time.
+            :
         elif matugen --config "$atomic_matugen_config" "${matugen_args[@]}"; then
             if [[ -n "$atomic_colors_file" ]]; then
                 if jq -e 'type == "object" and length > 0' "$atomic_colors_file" >/dev/null 2>&1; then
-                    mv -f -- "$atomic_colors_file" "$STATE_DIR/user/generated/colors.json"
+                    if [[ "$type_flag" == "scheme-intense" ]]; then
+                        python3 "$SCRIPT_DIR/boost_surface_chroma.py" "$atomic_colors_file" --mode "$mode_flag" || matugen_exit_code=1
+                    fi
+                    if [[ $matugen_exit_code -eq 0 ]]; then
+                        if cmp -s -- "$atomic_colors_file" "$STATE_DIR/user/generated/colors.json"; then
+                            rm -f -- "$atomic_colors_file"
+                        else
+                            mv -f -- "$atomic_colors_file" "$STATE_DIR/user/generated/colors.json"
+                        fi
+                    fi
                 else
                     matugen_exit_code=1
                     rm -f -- "$atomic_colors_file"
@@ -886,17 +912,13 @@ done"
             report_matugen_failure "switchwall.sh" "$matugen_exit_code"
             return "$matugen_exit_code"
         fi
-        if [[ "$type_flag" == "scheme-intense" ]]; then
-            echo "[switchwall.sh] Applying intense surface boost to colors.json (mode: $mode_flag)" >&2
-            python3 "$SCRIPT_DIR/boost_surface_chroma.py" "$STATE_DIR/user/generated/colors.json" --mode "$mode_flag"
-        fi
         if [[ -z "$colors_only_flag" && "$(jq -r '.appearance.icons.enableThemed' "$SHELL_CONFIG_FILE" 2>/dev/null)" == "true" ]]; then python3 "$HOME/.config/quickshell/ii/scripts/colors/recolor_icons.py"; fi
         source "$(eval echo $ILLOGICAL_IMPULSE_VIRTUAL_ENV)/bin/activate"
         mkdir -p "$TERMINAL_THEME_DIR"
         preview_args=()
         if [[ -z "$colors_only_flag" ]]; then
             preview_args+=(
-                --all-previews "$STATE_DIR/user/generated/wallpaper_preview_colors.json"
+                --all-previews "$SKWD_THEME_STATE_DIR/wallpaper_preview_colors.json"
                 --request-token "$request_token_file"
                 --request-value "$my_request_token"
             )
@@ -953,6 +975,7 @@ main() {
     noswitch_flag=""
     skwd_wall_flag=""
     skwd_wallpaper_engine_id=""
+    preset_apps_only_flag=""
 
     get_type_from_config() {
         jq -r '.appearance.palette.type' "$SHELL_CONFIG_FILE" 2>/dev/null || echo "auto"
@@ -997,6 +1020,10 @@ main() {
                 ;;
             --colors-only)
                 colors_only_flag="1"
+                shift
+                ;;
+            --preset-apps-only)
+                preset_apps_only_flag="1"
                 shift
                 ;;
             --skwd-wall)
@@ -1122,6 +1149,21 @@ main() {
     # Fallback to default wallpaper if empty
     if [[ -z "$imgpath" || "$imgpath" == "null" ]]; then
         imgpath="$CONFIG_DIR/assets/images/default_wallpaper.png"
+    fi
+
+    # The system file picker reaches here with --lockscreen. Treat that as a
+    # lock-only change: the normal switch path also rewrites desktop colors,
+    # starts app theming and can stop the desktop video renderer.
+    if [[ -n "$lockscreen_flag" && -z "$noswitch_flag" ]]; then
+        if [[ ! -f "$imgpath" ]]; then
+            echo "[switchwall.sh] Lock wallpaper does not exist: $imgpath" >&2
+            return 1
+        fi
+        set_wallpaper_path "$imgpath" "lockscreen" || return 1
+        local lock_color_args=(--image "$imgpath")
+        [[ -n "$mode_flag" ]] && lock_color_args+=(--mode "$mode_flag")
+        nice -n 10 "$SCRIPT_DIR/generate-lockscreen-colors.sh" "${lock_color_args[@]}"
+        return $?
     fi
 
     # If --lightmode is passed and --noswitch is passed:
