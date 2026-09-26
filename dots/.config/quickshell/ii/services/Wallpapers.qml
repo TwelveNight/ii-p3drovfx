@@ -517,10 +517,14 @@ Singleton {
             }
         }
         if (optionsChanged) Config.saveOptionsNow();
+        const requestSeq = ++root._wallpaperRequestSeq;
         const envBinPath = `${FileUtils.trimFileProtocol(Directories.home)}/.local/bin:${FileUtils.trimFileProtocol(Directories.home)}/.cargo/bin:/usr/local/bin:/usr/bin:/bin`;
-        // `switchwall.sh --noswitch` still runs the complete desktop Matugen
-        // and terminal-theme pipeline. A lockscreen pick owns only the
-        // separate lockscreen palette below.
+        Quickshell.execDetached([
+            "env", "-u", "LD_LIBRARY_PATH", "-u", "PYTHONHOME", "-u", "PYTHONPATH",
+            `PATH=${envBinPath}`, "bash", Directories.wallpaperSwitchScriptPath,
+            "--mode", darkMode ? "dark" : "light", "--image", path, "--lockscreen", "--noswitch",
+            "--request-seq", String(requestSeq)
+        ]);
         Quickshell.execDetached([
             "nice", "-n", "10", "env", "-u", "LD_LIBRARY_PATH", "-u", "PYTHONHOME", "-u", "PYTHONPATH",
             `PATH=${envBinPath}`, "bash", Directories.generateLockscreenColorsScriptPath,
@@ -735,9 +739,7 @@ Singleton {
         const forceArg = force ? " --force" : ""
         thumbgenProc.command = [
             "bash", "-c",
-            // GnomeDesktop's generic generator must not probe video files as
-            // images. The fallback handles them with ffmpeg.
-            `${thumbgenScriptPath} --size ${size} --only_images --machine_progress -d '${StringUtils.shellSingleQuoteEscape(FileUtils.trimFileProtocol(root.directory))}' || true; ${generateThumbnailsMagickScriptPath} --size ${size}${forceArg} -d '${StringUtils.shellSingleQuoteEscape(FileUtils.trimFileProtocol(root.directory))}'`,
+            `${thumbgenScriptPath} --size ${size} --machine_progress -d '${StringUtils.shellSingleQuoteEscape(FileUtils.trimFileProtocol(root.directory))}' || true; ${generateThumbnailsMagickScriptPath} --size ${size}${forceArg} -d '${StringUtils.shellSingleQuoteEscape(FileUtils.trimFileProtocol(root.directory))}'`,
         ]
         // console.log("[Wallpapers] Updating thumbnails with command ", thumbgenProc.command.join(" "))
         root.thumbnailGenerationProgress = 0
