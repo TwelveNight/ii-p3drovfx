@@ -140,9 +140,9 @@ case "$MODE" in
         fi
         for f in "$TARGET"/*; do
             [ -f "$f" ] || continue
-            generate_thumbnail "$f" &
+            # Avoid a decoder storm when a folder holds several videos.
+            generate_thumbnail "$f"
         done
-        wait
         ;;
     *)
         usage
