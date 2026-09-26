@@ -505,14 +505,10 @@ Singleton {
             }
         }
         if (optionsChanged) Config.saveOptionsNow();
-        const requestSeq = ++root._wallpaperRequestSeq;
         const envBinPath = `${FileUtils.trimFileProtocol(Directories.home)}/.local/bin:${FileUtils.trimFileProtocol(Directories.home)}/.cargo/bin:/usr/local/bin:/usr/bin:/bin`;
-        Quickshell.execDetached([
-            "env", "-u", "LD_LIBRARY_PATH", "-u", "PYTHONHOME", "-u", "PYTHONPATH",
-            `PATH=${envBinPath}`, "bash", Directories.wallpaperSwitchScriptPath,
-            "--mode", darkMode ? "dark" : "light", "--image", path, "--lockscreen", "--noswitch",
-            "--request-seq", String(requestSeq)
-        ]);
+        // `switchwall.sh --noswitch` still runs the complete desktop Matugen
+        // and terminal-theme pipeline. A lockscreen pick owns only the
+        // separate lockscreen palette below.
         Quickshell.execDetached([
             "env", "-u", "LD_LIBRARY_PATH", "-u", "PYTHONHOME", "-u", "PYTHONPATH",
             `PATH=${envBinPath}`, "bash", Directories.generateLockscreenColorsScriptPath,
