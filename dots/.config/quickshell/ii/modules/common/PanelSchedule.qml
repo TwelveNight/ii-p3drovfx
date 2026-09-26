@@ -27,6 +27,9 @@ Singleton {
     /// Panels waiting for a slot, best first: higher `priority`, then the order they asked in.
     property var waiting: []
 
+    /// Count granted slots to leave a quiet window after the first visible panel.
+    property int released: 0
+
     /// Holds new panels back while a config change is still being applied in
     /// stages. A preset that swaps the bar for the vertical bar and the
     /// sidebars for the top layer lands across several frames, and building
@@ -59,9 +62,14 @@ Singleton {
     }
 
     Timer {
-        // Not zero: the panel built on the previous tick still has a first frame to
-        // render, and beating it to the next one puts the stall back.
-        interval: 8
+        // The highest-priority bar is released first. Give its mapped frame a quiet window
+        // before the background and the dozens of hidden utility surfaces begin
+        // compiling. Eight milliseconds was shorter than one 120 Hz frame, so the
+        // next synchronous panel could occupy the GUI thread before the compositor
+        // ever saw the bar. Afterwards keep several frames between panels: startup
+        // finishes a little later, but the visible shell arrives first and remains
+        // responsive while secondary surfaces are populated.
+        interval: root.released === 0 ? 1 : (root.released === 1 ? 700 : 120)
         repeat: true
         running: !root.hold && root.waiting.length > 0
 
@@ -69,8 +77,10 @@ Singleton {
             const queue = root.waiting.slice();
             const loader = queue.shift();
             root.waiting = queue;
-            if (loader && loader.wanted)
+            if (loader && loader.wanted) {
                 loader.granted = true;
+                root.released++;
+            }
         }
     }
 }
