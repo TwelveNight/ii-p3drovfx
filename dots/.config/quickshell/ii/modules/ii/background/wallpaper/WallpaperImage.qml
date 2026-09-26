@@ -821,14 +821,11 @@ Item {
 
                         readonly property bool isActive: wallpaperImageRoot.useSeparateLockscreenWallpaper && wallpaperImageRoot.lockscreenWallpaperPath !== "" && wallpaperImageRoot.lockscreenWallpaperPath !== wallpaperImageRoot.wallpaperPath
                         visible: isActive && opacity > 0
+                        // The desktop wallpaper may have just changed with a
+                        // preset. Cross-fading this separate lock image over it
+                        // reveals the preset first, then the user's lock image.
+                        // Switch the lock layer atomically instead.
                         opacity: (isActive && GlobalStates.lockLookActive) ? 1.0 : 0.0
-
-                        Behavior on opacity {
-                            NumberAnimation {
-                                duration: Math.round(750 * Appearance.animMultiplier)
-                                easing.type: Easing.InOutCubic
-                            }
-                        }
 
                         // GPU: same dynamic sourceSize cap as main wallpaper
                         sourceSize: Config.options.background.scaleLargeWallpapers ? Qt.size(screen.width > 0 ? Math.round(screen.width * preferredWallpaperScale) : 1920, screen.height > 0 ? Math.round(screen.height * preferredWallpaperScale) : 1080) : Qt.size(-1, -1)
@@ -838,7 +835,7 @@ Item {
                         imageSource: (isActive && !wallpaperSafetyTriggered && !lockscreenVideo.isVideoLockscreen)
                             ? wallpaperImageRoot.lockscreenWallpaperPath
                             : ""
-                        animated: Config.options.background.animateWallpaperChanges
+                        animated: false
                         transitionShader: Config.options.background.wallpaperAnimation
                         shadersPath: Qt.resolvedUrl("../shaders")
                         fillMode: Image.PreserveAspectCrop
