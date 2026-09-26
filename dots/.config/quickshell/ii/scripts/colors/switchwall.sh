@@ -77,6 +77,14 @@ recolor_icons_in_background() {
 }
 
 handle_kde_material_you_colors() {
+    # This integration polls org.kde.plasmashell for its wallpaper even when
+    # invoked with --color. On Hyprland the DBus name cannot be activated; the
+    # helper then loops, burns CPU and repeatedly notifies "Could not get
+    # wallpaper". Only start it in an actual Plasma session.
+    if ! pgrep -x plasmashell >/dev/null 2>&1; then
+        return 0
+    fi
+
     # Check if Qt app theming is enabled in config
     if [ -f "$SHELL_CONFIG_FILE" ]; then
         enable_qt_apps=$(jq -r '.appearance.wallpaperTheming.enableQtApps' "$SHELL_CONFIG_FILE")
