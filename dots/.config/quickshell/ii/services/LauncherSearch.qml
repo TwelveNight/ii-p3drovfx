@@ -192,6 +192,7 @@ Singleton {
     }
 
     Component.onCompleted: Qt.callLater(() => {
+        root.rebuildAppCategories();
         root.enforceAlwaysListAppsOverviewPolicy();
         root._scheduleResultsUpdate();
     })
@@ -1495,14 +1496,22 @@ Singleton {
 
     // https://specifications.freedesktop.org/menu/latest/category-registry.html
     property list<string> mainRegisteredCategories: ["AudioVideo", "Development", "Education", "Game", "Graphics", "Network", "Office", "Science", "Settings", "System", "Utility"]
-    property list<string> appCategories: DesktopEntries.applications.values.reduce((acc, entry) => {
-        for (const category of entry.categories) {
-            if (!acc.includes(category) && mainRegisteredCategories.includes(category)) {
-                acc.push(category);
+    property list<string> appCategories: []
+    function rebuildAppCategories() {
+        const acc = [];
+        for (const entry of AppSearch.list) {
+            for (const category of entry.categories) {
+                if (!acc.includes(category) && mainRegisteredCategories.includes(category)) {
+                    acc.push(category);
+                }
             }
         }
-        return acc;
-    }, []).sort()
+        root.appCategories = acc.sort();
+    }
+    Connections {
+        target: AppSearch
+        function onListChanged() { root.rebuildAppCategories(); }
+    }
 
     // Load user action scripts from ~/.config/illogical-impulse/actions/
     // Uses FolderListModel to auto-reload when scripts are added/removed
