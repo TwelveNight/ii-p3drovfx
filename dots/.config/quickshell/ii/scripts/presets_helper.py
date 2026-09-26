@@ -208,6 +208,8 @@ SEARCH_LOCAL_PREFERENCE_PATHS = (
 )
 
 LOCAL_PREFERENCE_PATHS = (
+    "background.useSeparateLockscreenWallpaper",
+    "background.lockscreenWallpaperPath",
     "appearance.iconTheme",
     "appearance.icons.enableThemed",
     "language",

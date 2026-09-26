@@ -2,8 +2,7 @@
 # generate-lockscreen-colors.sh
 # Pre-generates M3 color scheme for the lockscreen wallpaper using matugen --dry-run.
 # Does NOT touch colors.json or any other active theme file.
-# Output: $STATE_DIR/user/generated/lockscreen_colors.json
-# Also backs up current desktop colors to: $STATE_DIR/user/generated/desktop_colors.json
+# Auxiliary outputs live away from colors.json's watched directory.
 
 QUICKSHELL_CONFIG_NAME="ii"
 XDG_CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
@@ -15,8 +14,9 @@ SHELL_CONFIG_FILE="$XDG_CONFIG_HOME/illogical-impulse/config.json"
 source "$SCRIPT_DIR/matugen.sh"
 
 CURRENT_COLORS="$STATE_DIR/user/generated/colors.json"
-LOCKSCREEN_COLORS="$STATE_DIR/user/generated/lockscreen_colors.json"
-DESKTOP_COLORS="$STATE_DIR/user/generated/desktop_colors.json"
+THEME_STATE_DIR="$XDG_STATE_HOME/ii-skwd-wall"
+LOCKSCREEN_COLORS="$THEME_STATE_DIR/lockscreen_colors.json"
+DESKTOP_COLORS="$THEME_STATE_DIR/desktop_colors.json"
 
 imgpath=""
 mode_flag=""
@@ -73,7 +73,7 @@ for t in "${allowed_types[@]}"; do [[ "$type_flag" == "$t" ]] && { valid=1; brea
 
 echo "[generate-lockscreen-colors] Generating for: $imgpath (mode=$mode_flag type=$type_flag)"
 
-mkdir -p "$STATE_DIR/user/generated"
+mkdir -p "$THEME_STATE_DIR"
 
 # Step 1: backup current desktop colors (cp = new inode, does NOT trigger inotify on existing watch)
 if [[ -f "$CURRENT_COLORS" ]]; then
@@ -135,5 +135,9 @@ if [[ $py_status -ne 0 || ! -s "$LOCKSCREEN_COLORS.tmp" ]]; then
     exit 1
 fi
 
-mv "$LOCKSCREEN_COLORS.tmp" "$LOCKSCREEN_COLORS"
+if cmp -s -- "$LOCKSCREEN_COLORS.tmp" "$LOCKSCREEN_COLORS"; then
+    rm -f -- "$LOCKSCREEN_COLORS.tmp"
+else
+    mv "$LOCKSCREEN_COLORS.tmp" "$LOCKSCREEN_COLORS"
+fi
 echo "[generate-lockscreen-colors] Done → $LOCKSCREEN_COLORS"

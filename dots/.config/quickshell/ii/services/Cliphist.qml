@@ -25,6 +25,8 @@ Singleton {
     property bool levenshteinSearch: (Config.options?.search.levenshtein ?? false) || (Config.options?.search.algorithm === "levenshtein")
     property real scoreThreshold: 0.2
     property list<string> entries: []
+    // Avoid a synchronous Wayland clipboard read in every visible search row.
+    readonly property string currentEntryText: entries.length > 0 ? StringUtils.cleanCliphistEntry(entries[0]) : ""
     property list<string> pendingDeletes: []
     readonly property var preparedEntries: entries.slice(0, 150).map(a => ({
         name: Fuzzy.prepare(`${a.replace(/^\s*\S+\s+/, "")}`),

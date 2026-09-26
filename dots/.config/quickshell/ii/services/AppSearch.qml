@@ -45,10 +45,10 @@ Singleton {
         }
     ]
 
-    // Deduped list to fix double icons, pre-sorted alphabetically to avoid sorting on every query.
-    // Deduped through a Set rather than findIndex per entry: this rebuilds on every
-    // desktop entry rescan, and the quadratic version made each rescan a visible hitch.
-    readonly property list<DesktopEntry> list: {
+    // A desktop-entry rescan can emit valuesChanged once per entry. Rebuild the
+    // fuzzy indexes once after the burst, rather than once for every signal.
+    property list<DesktopEntry> list: []
+    function rebuildList() {
         const seen = new Set();
         const arr = [];
         for (const app of DesktopEntries.applications.values) {
@@ -58,8 +58,19 @@ Singleton {
             arr.push(app);
         }
         arr.sort((a, b) => (a.name || "").localeCompare(b.name || ""));
-        return arr;
+        root.list = arr;
     }
+    Timer {
+        id: rebuildListTimer
+        interval: 150
+        repeat: false
+        onTriggered: root.rebuildList()
+    }
+    Connections {
+        target: DesktopEntries.applications
+        function onValuesChanged() { rebuildListTimer.restart(); }
+    }
+    Component.onCompleted: root.rebuildList()
 
     readonly property var preppedNames: list.map(a => ({
                 name: Fuzzy.prepare(`${a.name} `),

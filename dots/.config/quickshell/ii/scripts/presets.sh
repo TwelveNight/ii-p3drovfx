@@ -168,7 +168,7 @@ apply_colors() {
         if [[ -n "$switch_to" && -f "$switch_to" ]]; then
             "${nice_cmd[@]}" "$SCRIPTS_DIR/colors/switchwall.sh" --image "$switch_to"
         else
-            "${nice_cmd[@]}" "$SCRIPTS_DIR/colors/switchwall.sh" --noswitch
+            "${nice_cmd[@]}" "$SCRIPTS_DIR/colors/switchwall.sh" --noswitch --preset-apps-only
         fi
     ) > /tmp/presets_switchwall.log 2>&1 &
 }
