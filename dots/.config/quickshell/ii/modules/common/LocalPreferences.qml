@@ -118,6 +118,8 @@ Singleton {
         "wallpaperSelector.customDefaultPath",
         "wallpaperSelector.directories",
         // Choices a theme has no business overriding.
+        "background.useSeparateLockscreenWallpaper",
+        "background.lockscreenWallpaperPath",
         "appearance.iconTheme",
         "appearance.icons.enableThemed",
         "search.*",

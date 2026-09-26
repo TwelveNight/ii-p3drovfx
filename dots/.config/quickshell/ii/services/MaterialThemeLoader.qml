@@ -159,7 +159,7 @@ Singleton {
             // snapping — a preset switch is the one time colors.json changes
             // wholesale, and the flash is exactly what the staged transition is
             // meant to remove. Ordinary edits keep their instant apply.
-            root.applyCurrentPalette(GlobalStates.presetRecoloring)
+            root.applyCurrentPalette(false)
         }
     }
 
@@ -181,7 +181,9 @@ Singleton {
     Connections {
         target: root
         function onLockThemeActiveChanged() {
-            root.applyCurrentPalette(true);
+            // The lock face fades in separately. Keep this palette switch
+            // atomic so locking does not rebind every colored item per frame.
+            root.applyCurrentPalette(false);
         }
     }
 
