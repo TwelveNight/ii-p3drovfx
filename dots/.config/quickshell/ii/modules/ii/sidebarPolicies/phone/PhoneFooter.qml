@@ -60,7 +60,16 @@ Rectangle {
     readonly property bool _scrcpyPresent: KdeConnectService.scrcpyAvailable
     readonly property bool _droidcamPresent: PhoneCameraService.available
     readonly property bool _micPresent: PhoneMicService.available
-    readonly property bool _deviceOnline: KdeConnectService.activeReachable
+    // Each peripheral has its own transport; a configured camera target does not
+    // imply that screen mirroring or the microphone can reach the phone.
+    readonly property bool _mirrorTarget: KdeConnectService.activeReachable || KdeConnectService.adbReachable
+    readonly property bool _webcamTarget: root._mirrorTarget
+        || Config.options.phone.webcam.connection === "usb"
+        || (Config.options.phone.webcam.wifiIp || "").trim() !== ""
+    readonly property bool _micTarget: root._mirrorTarget
+        || Config.options.phone.microphone.connection === "usb"
+        || (Config.options.phone.microphone.wifiIp || "").trim() !== ""
+
 
     readonly property bool embedEnabled: Config.options?.phone?.scrcpy?.embed?.enabled ?? true
     readonly property bool mirrorRunning: KdeConnectService.scrcpyRunning || PhoneScrcpyService.mirrorRunning
@@ -69,15 +78,15 @@ Rectangle {
     readonly property bool mirrorEmbedded: root.embedEnabled && PhoneMirrorService.running
 
     readonly property string mirrorState: !root._scrcpyPresent ? "unavailable"
-        : !root._deviceOnline || root.mirrorError.length > 0 ? "offline"
+        : !root._mirrorTarget || root.mirrorError.length > 0 ? "offline"
         : (root.mirrorEmbedded || root.mirrorRunning) ? "active"
         : root.mirrorLaunching ? "connecting" : "ready"
     readonly property string webcamState: !root._droidcamPresent ? "unavailable"
-        : !root._deviceOnline ? "offline"
+        : !root._webcamTarget ? "offline"
         : PhoneCameraService.connecting ? "connecting"
         : PhoneCameraService.running ? "active" : "ready"
     readonly property string micState: !root._micPresent ? "unavailable"
-        : !root._deviceOnline ? "offline"
+        : !root._micTarget ? "offline"
         : PhoneMicService.connecting ? "connecting"
         : PhoneMicService.running ? "active" : "ready"
     readonly property var featureStates: [root.mirrorState, root.webcamState, root.micState]
@@ -345,8 +354,8 @@ Rectangle {
             subtitle: {
                 if (!root._scrcpyPresent)
                     return Translation.tr("See the missing dependencies");
-                if (!root._deviceOnline)
-                    return Translation.tr("Pair a reachable device");
+                if (!root._mirrorTarget)
+                    return Translation.tr("Connect the phone through ADB to mirror its screen");
                 if (root.mirrorEmbedded)
                     return Translation.tr("Mirroring in the sidebar");
                 if (root.mirrorRunning)
@@ -361,10 +370,10 @@ Rectangle {
             mainSymbol: !root._scrcpyPresent ? "download"
                 : root.embedEnabled ? "view_sidebar"
                 : root.mirrorRunning ? "stop" : "open_in_new"
-            mainEnabled: !root._scrcpyPresent || root._deviceOnline
+            mainEnabled: !root._scrcpyPresent || root._mirrorTarget
             showStop: root.mirrorEmbedded || (root.embedEnabled && root.mirrorRunning)
             settingsPage: "PhoneScrcpyPage.qml"
-            error: root._scrcpyPresent && root._deviceOnline ? root.mirrorError.split("\n")[0] : ""
+            error: root._scrcpyPresent && root._mirrorTarget ? root.mirrorError.split("\n")[0] : ""
             detail: root.mirrorEmbedded || root.mirrorRunning
                 ? [root.mirrorEmbedded ? Translation.tr("In the sidebar") : Translation.tr("In a window"),
                    Config.options.phone.scrcpy.useWireless
@@ -372,7 +381,7 @@ Rectangle {
                        : "USB",
                    Config.options.phone.scrcpy.noAudio ? Translation.tr("no audio") : Translation.tr("audio on")].join(" · ")
                 : ""
-            dropEnabled: (root.mirrorEmbedded || root.mirrorRunning) && root._deviceOnline
+            dropEnabled: (root.mirrorEmbedded || root.mirrorRunning) && KdeConnectService.activeReachable
             onFilesDropped: urls => {
                 for (const url of urls) {
                     const file = String(url).replace(/^file:\/\//, "");
@@ -396,7 +405,7 @@ Rectangle {
                 { icon: "content_paste", label: Translation.tr("Clipboard"), checked: Config.options.phone.scrcpy.clipboardSync ?? true,
                   toggle: () => Config.options.phone.scrcpy.clipboardSync = !(Config.options.phone.scrcpy.clipboardSync ?? true) }
             ]
-            actions: !(root._scrcpyPresent && root._deviceOnline) ? [] : (PhoneMirrorService.running ? [
+            actions: !(root._scrcpyPresent && root._mirrorTarget) ? [] : (PhoneMirrorService.running ? [
                 { icon: "arrow_back", label: Translation.tr("Back"), run: () => PhoneMirrorService.goBack() },
                 { icon: "circle", label: Translation.tr("Home"), run: () => PhoneMirrorService.goHome() },
                 { icon: "crop_square", label: Translation.tr("Recent apps"), run: () => PhoneMirrorService.goRecents() }
@@ -423,8 +432,8 @@ Rectangle {
             subtitle: {
                 if (!root._droidcamPresent)
                     return Translation.tr("See the missing dependencies");
-                if (!root._deviceOnline)
-                    return Translation.tr("Pair a reachable device");
+                if (!root._webcamTarget)
+                    return Translation.tr("Connect by USB or set the phone Wi-Fi IP in settings");
                 if (PhoneCameraService.connecting)
                     return Translation.tr("Connecting to %1…").arg(PhoneCameraService.activeIp || "?");
                 if (PhoneCameraService.running)
@@ -436,7 +445,7 @@ Rectangle {
                 : root.webcamState === "active" ? Translation.tr("Stop") : Translation.tr("Start")
             mainSymbol: !root._droidcamPresent ? "download"
                 : root.webcamState === "active" ? "stop" : "play_arrow"
-            mainEnabled: !root._droidcamPresent || root._deviceOnline
+            mainEnabled: !root._droidcamPresent || root._webcamTarget
             settingsPage: "PhoneWebcamPage.qml"
             error: root._droidcamPresent && !PhoneCameraService.running ? PhoneCameraService.lastError.split("\n")[0] : ""
             detail: PhoneCameraService.running
@@ -478,8 +487,8 @@ Rectangle {
             subtitle: {
                 if (!root._micPresent)
                     return Translation.tr("See the missing dependencies");
-                if (!root._deviceOnline)
-                    return Translation.tr("Pair a reachable device");
+                if (!root._micTarget)
+                    return Translation.tr("Connect by USB or set the phone Wi-Fi IP in settings");
                 if (PhoneMicService.connecting)
                     return Translation.tr("Setting up audio routing…");
                 if (PhoneMicService.running)
@@ -491,7 +500,7 @@ Rectangle {
                 : root.micState === "active" ? Translation.tr("Stop") : Translation.tr("Start")
             mainSymbol: !root._micPresent ? "download"
                 : root.micState === "active" ? "stop" : "play_arrow"
-            mainEnabled: !root._micPresent || root._deviceOnline
+            mainEnabled: !root._micPresent || root._micTarget
             settingsPage: "PhoneMicPage.qml"
             error: root._micPresent && !PhoneMicService.running ? PhoneMicService.lastError.split("\n")[0] : ""
             detail: PhoneMicService.running
