@@ -39,18 +39,19 @@ hl.bind("SUPER + O", hl.dsp.window.fullscreen({mode = "maximized", action = "tog
 -- B → right sidebar (A already covers left sidebar)
 hl.unbind("SUPER + B", hl.dsp.global("quickshell:sidebarLeftToggle"))
 hl.bind("SUPER + B", hl.dsp.global("quickshell:sidebarRightToggle"))
--- Extra overview binding
--- SUPER+Space: same as original bare Win key (searchToggleRelease: press arms, release toggles)
+-- SUPER+Space: same as SUPER+Tab (overview toggle on press).
 hl.unbind("SUPER + Space", hl.dsp.exec_cmd("hyprctl switchxkblayout all next"))
-hl.bind("SUPER + Space", hl.dsp.global("quickshell:searchToggleRelease"))
-hl.bind("SUPER + Space", hl.dsp.global("quickshell:searchToggleRelease"), {release = true})
-hl.bind("SUPER + Space", hl.dsp.exec_cmd("qs -c $qsConfig ipc call TEST_ALIVE ping || pkill fuzzel || fuzzel"))
--- Keep bare Super inert. The upstream layer binds it to the launcher, so
--- remove both its panel-family action and its fallback launcher command.
+hl.bind("SUPER + Space", hl.dsp.global("quickshell:overviewWorkspacesToggle"), {
+    description = "Shell: Toggle overview",
+})
+-- Bare Super opens search only while the Waffle family owns its dedicated
+-- global shortcut. Other panel families do not register this action.
 hl.unbind("SUPER + SUPER_L", hl.dsp.global("quickshell:searchToggleRelease"))
 hl.unbind("SUPER + SUPER_R", hl.dsp.global("quickshell:searchToggleRelease"))
 hl.unbind("SUPER + SUPER_L", hl.dsp.exec_cmd("qs -c $qsConfig ipc call TEST_ALIVE ping || pkill fuzzel || fuzzel"))
 hl.unbind("SUPER + SUPER_R", hl.dsp.exec_cmd("qs -c $qsConfig ipc call TEST_ALIVE ping || pkill fuzzel || fuzzel"))
+hl.bind("SUPER + SUPER_L", hl.dsp.global("quickshell:waffleSearchToggleRelease"), {description = "Waffle: Toggle search"})
+hl.bind("SUPER + SUPER_R", hl.dsp.global("quickshell:waffleSearchToggleRelease"))
 -- Free N for workspace navigation (unbind sidebarRightToggle)
 hl.unbind("SUPER + N", hl.dsp.global("quickshell:sidebarRightToggle"))
 -- Free P for workspace navigation
@@ -207,12 +208,11 @@ hl.bind("CTRL + ALT + K",    hl.dsp.exec_cmd("wpctl set-volume @DEFAULT_AUDIO_SI
 hl.bind("CTRL + ALT + Down", hl.dsp.exec_cmd("wpctl set-volume @DEFAULT_AUDIO_SINK@ 2%-"), {repeating = true})
 hl.bind("CTRL + ALT + Up",   hl.dsp.exec_cmd("wpctl set-volume @DEFAULT_AUDIO_SINK@ 2%+"), {repeating = true})
 
--- ALT+Space: same as SUPER+Tab (overview toggle on press), unbind vicinae
+-- ALT+Space: open the launcher-only surface from Settings -> "Try the launcher".
 hl.unbind("ALT + Space", hl.dsp.exec_cmd("vicinae"))
-hl.bind("ALT + Space", hl.dsp.global("quickshell:overviewWorkspacesToggle"))
-
--- Vicinae clipboard
-hl.bind("ALT + Space", hl.dsp.exec_cmd("vicinae"), {description = "Vicinae clipboard"})
+hl.bind("ALT + Space", hl.dsp.global("quickshell:searchOnlyToggle"), {
+    description = "Shell: Open search only",
+})
 
 -- Clean submap (passthrough all keys, exit with Super+Shift+Alt+P)
 hl.define_submap("clean", function()
