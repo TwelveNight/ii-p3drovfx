@@ -12,6 +12,7 @@ Item {
     height: implicitHeight
 
     signal requestOpenSubPage(url subPageUrl)
+    property bool showContacts: true
 
     RowLayout {
         id: navigationRow
@@ -22,6 +23,7 @@ Item {
         // Contacts Card
         RippleButton {
             id: contactsBtn
+            visible: root.showContacts
             Layout.fillWidth: true
             // Equal preferred widths so the row splits exactly in half;
             // left to implicitWidth, the longer label claimed more.
