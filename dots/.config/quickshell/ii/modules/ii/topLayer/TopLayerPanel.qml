@@ -780,6 +780,11 @@ PanelWindow {
         WlrLayershell.namespace: "quickshell:pinReserver"
         exclusionMode: ExclusionMode.Normal
         color: "transparent"
+        // This surface exists only to reserve the pinned sidebar's screen
+        // space. Without an empty input mask it intercepts pointer events
+        // across the whole reserved strip, leaving the sidebar visible but
+        // unclickable.
+        mask: Region {}
         visible: GlobalStates.connectModeActive && !GlobalStates.connectSidebarsSeparate && GlobalStates.policiesPinned && !GlobalStates.policiesDetached && topPanel.policiesActiveOnMonitor
         anchors {
             top: true
