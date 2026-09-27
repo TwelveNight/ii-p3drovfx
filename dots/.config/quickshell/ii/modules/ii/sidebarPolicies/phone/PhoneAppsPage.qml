@@ -4,6 +4,8 @@ import QtQuick
 import QtQuick.Layouts
 import QtQuick.Controls
 import Qt5Compat.GraphicalEffects
+import Quickshell
+import Quickshell.Io
 import qs.modules.common
 import qs.modules.common.widgets
 import qs.services
@@ -15,6 +17,32 @@ Rectangle {
 
     property bool showBackButton: true
     signal goBack()
+    property string selectedTextTarget: ""
+    property string textSendStatus: ""
+    readonly property var runningAppSessions: (PhoneScrcpyService.sessions || [])
+        .filter(session => session.type === "app" && session.package)
+    readonly property string resolvedTextTarget: root.runningAppSessions.some(
+        session => session.package === root.selectedTextTarget)
+            ? root.selectedTextTarget : (root.runningAppSessions[0]?.package || "")
+
+    function appDisplayName(packageName): string {
+        const app = (PhoneScrcpyService.apps || []).find(item => item.package === packageName)
+        return app?.name || String(packageName || "").split(".").pop()
+    }
+
+    function sendTextToPhone(): void {
+        const target = root.resolvedTextTarget
+        const text = String(phoneTextInput.text || "")
+        if (!target || text.length === 0 || pasteProcess.running) return
+
+        // Compose with the desktop IME in this Qt text field, then use the
+        // clipboard path that scrcpy can reliably inject into Android.
+        Quickshell.clipboardText = text
+        root.selectedTextTarget = target
+        root.textSendStatus = Translation.tr("Focusing app…")
+        PhoneScrcpyService.focusApp(target)
+        focusPhoneAppTimer.restart()
+    }
 
     // Sub-page entrance animation
     opacity: 0
@@ -206,6 +234,118 @@ Rectangle {
                           ? Translation.tr("Refresh app list and fetch missing icons")
                           : Translation.tr("Refresh app list")
                 }
+            }
+        }
+
+        // Desktop Fcitx composition is not consistently delivered through
+        // scrcpy's SDL keyboard path. Compose here, then paste via scrcpy.
+        Rectangle {
+            Layout.fillWidth: true
+            Layout.preferredHeight: 132
+            radius: Appearance.rounding.normal
+            color: Appearance.colors.colLayer3
+            visible: root.runningAppSessions.length > 0
+
+            ColumnLayout {
+                anchors.fill: parent
+                anchors.margins: 10
+                spacing: 7
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    MaterialSymbol {
+                        text: "translate"
+                        iconSize: 18
+                        color: Appearance.colors.colPrimary
+                    }
+                    StyledText {
+                        Layout.fillWidth: true
+                        text: Translation.tr("Type Chinese for phone app")
+                        font.pixelSize: Appearance.font.pixelSize.small
+                        font.weight: Font.DemiBold
+                        color: Appearance.colors.colOnLayer3
+                    }
+                    ComboBox {
+                        visible: root.runningAppSessions.length > 1
+                        Layout.preferredWidth: 132
+                        model: root.runningAppSessions
+                        textRole: "package"
+                        currentIndex: Math.max(0, root.runningAppSessions.findIndex(
+                            session => session.package === root.resolvedTextTarget))
+                        displayText: root.appDisplayName(root.resolvedTextTarget)
+                        delegate: ItemDelegate {
+                            required property var modelData
+                            width: parent.width
+                            text: root.appDisplayName(modelData.package)
+                            highlighted: ListView.isCurrentItem
+                        }
+                        onActivated: index => {
+                            const session = root.runningAppSessions[index]
+                            if (session) root.selectedTextTarget = session.package
+                        }
+                    }
+                }
+
+                Rectangle {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    radius: Appearance.rounding.small
+                    color: Appearance.colors.colLayer2
+
+                    StyledTextArea {
+                        id: phoneTextInput
+                        anchors.fill: parent
+                        padding: 8
+                        wrapMode: TextArea.Wrap
+                        placeholderText: Translation.tr("Type here with Fcitx, then send to the selected phone app")
+                        background: null
+                    }
+                }
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    StyledText {
+                        Layout.fillWidth: true
+                        text: root.textSendStatus
+                        font.pixelSize: Appearance.font.pixelSize.smallest
+                        color: Appearance.colors.colSubtext
+                        elide: Text.ElideRight
+                    }
+                    RippleButton {
+                        Layout.preferredWidth: 86
+                        Layout.preferredHeight: 30
+                        buttonRadius: Appearance.rounding.full
+                        colBackground: Appearance.colors.colPrimary
+                        colBackgroundHover: Appearance.colors.colPrimaryHover
+                        enabled: phoneTextInput.text.length > 0 && !pasteProcess.running
+                        contentItem: StyledText {
+                            anchors.centerIn: parent
+                            text: pasteProcess.running ? Translation.tr("Sending…") : Translation.tr("Send")
+                            font.pixelSize: Appearance.font.pixelSize.small
+                            font.weight: Font.DemiBold
+                            color: Appearance.colors.colOnPrimary
+                        }
+                        onClicked: root.sendTextToPhone()
+                    }
+                }
+            }
+        }
+
+        Timer {
+            id: focusPhoneAppTimer
+            interval: 500
+            repeat: false
+            onTriggered: pasteProcess.running = true
+        }
+
+        Process {
+            id: pasteProcess
+            command: ["wtype", "-M", "alt", "-k", "v", "-m", "alt"]
+            onExited: (exitCode, exitStatus) => {
+                root.textSendStatus = exitCode === 0
+                    ? Translation.tr("Text sent")
+                    : Translation.tr("Paste shortcut failed; text remains in clipboard")
+                if (exitCode === 0) phoneTextInput.text = ""
             }
         }
 
