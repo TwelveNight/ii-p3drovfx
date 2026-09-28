@@ -365,10 +365,18 @@ ContentPage {
                     color: Appearance.colors.colOnSecondaryContainer
                 }
             }
-            onClicked: Quickshell.execDetached(["python3", Quickshell.shellPath("scripts/phone/waydroid_flex.py")])
+            onClicked: Quickshell.execDetached(["python3", Quickshell.shellPath("scripts/phone/waydroid_flex.py"), Config.options.phone.waydroidFlex.bitRate])
             StyledToolTip {
                 text: Translation.tr("Start Waydroid and open a resizable Android window")
             }
+        }
+
+        ConfigTextField {
+            text: Translation.tr("Waydroid Flex bitrate")
+            icon: "network_check"
+            placeholderText: "4M"
+            inputText: Config.options.phone.waydroidFlex.bitRate
+            textField.onEditingFinished: Config.options.phone.waydroidFlex.bitRate = textField.text.trim()
         }
     }
 
