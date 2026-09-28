@@ -91,7 +91,7 @@ Singleton {
     // once it has been idle with no live session — never while one is running, since it owns those
     // scrcpy child processes and reports their exit.
     property bool _managerWanted: false
-    readonly property bool _managerAllowed: (Config.options?.phone?.kdeconnectEnabled ?? true) && KdeConnectService.available
+    readonly property bool _managerAllowed: Config.options?.policies?.phone !== 0
 
     function ensureManagerRunning(): void {
         if (!root._managerAllowed) return
@@ -169,19 +169,13 @@ Singleton {
             root.focusMirror()
             return
         }
-        // This used to leave the button spinning on "launching" forever:
-        // nothing was ever sent, so nothing ever answered.
-        if (!(Config.options?.phone?.kdeconnectEnabled ?? true)) {
-            root.reportFailure("mirror", Translation.tr("The phone integration is turned off"))
-            return
-        }
         root.mirrorLaunching = true
         root.mirrorLaunchError = ""
         root._whenManagerAllowed("mirror", () => KdeConnectService.withAdbTarget(args => root._launchMirror(args)))
     }
 
-    // Right after a shell (re)start KDE Connect is still being probed, and a
-    // launch in that window used to be dropped. It waits for it instead.
+    // A command can arrive while the Phone tab is being enabled. Hold it until
+    // the scrcpy session manager is allowed to start.
     property var _waitingForManager: ({})
 
     function _whenManagerAllowed(sessionId: string, run): void {
@@ -213,7 +207,7 @@ Singleton {
             root._waitingForManager = ({})
             for (const id in waiting) {
                 if (id === root.recordSessionId) root.recordingLaunching = false
-                root.reportFailure(id, Translation.tr("KDE Connect is not running"))
+                root.reportFailure(id, Translation.tr("The Phone tab is disabled"))
             }
         }
     }
