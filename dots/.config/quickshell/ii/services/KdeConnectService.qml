@@ -2024,6 +2024,7 @@ Singleton {
         let turnScreenOff = true
         let noPowerOn = true
         let noAudio = false
+        let audioBuffer = 200
         let showTouches = false
         let fullscreen = false
         let alwaysOnTop = false
@@ -2042,6 +2043,7 @@ Singleton {
             turnScreenOff = scrcpyConf.turnScreenOff
             noPowerOn = scrcpyConf.noPowerOn
             noAudio = scrcpyConf.noAudio
+            audioBuffer = scrcpyConf.audioBuffer
             showTouches = scrcpyConf.showTouches
             fullscreen = scrcpyConf.fullscreen
             alwaysOnTop = scrcpyConf.alwaysOnTop
@@ -2068,6 +2070,7 @@ Singleton {
         if (turnScreenOff) scrcpyArgs.push("--turn-screen-off")
         if (noPowerOn) scrcpyArgs.push("--no-power-on")
         if (noAudio) scrcpyArgs.push("--no-audio")
+        else if (audioBuffer > 0) scrcpyArgs.push("--audio-buffer=" + audioBuffer)
         if (showTouches) scrcpyArgs.push("--show-touches")
         if (fullscreen) scrcpyArgs.push("--fullscreen")
         if (alwaysOnTop) scrcpyArgs.push("--always-on-top")

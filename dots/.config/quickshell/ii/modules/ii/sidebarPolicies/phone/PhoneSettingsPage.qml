@@ -290,6 +290,14 @@ Item {
                     from: 0; to: 1000; stepSize: 10
                     onMoved: v => root.scrcpy.videoBuffer = v
                 }
+                StepperRow {
+                    symbol: "graphic_eq"
+                    title: Translation.tr("Audio Buffer (ms)")
+                    help: Translation.tr("A larger buffer reduces audio dropouts on unstable wireless links, with more audio delay.")
+                    value: root.scrcpy.audioBuffer
+                    from: 50; to: 500; stepSize: 25
+                    onMoved: v => root.scrcpy.audioBuffer = v
+                }
             }
 
             // ── Input, clipboard & recording ──

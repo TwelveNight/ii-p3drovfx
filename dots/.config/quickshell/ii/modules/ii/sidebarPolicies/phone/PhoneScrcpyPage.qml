@@ -378,6 +378,17 @@ ContentPage {
             onValueChanged: Config.options.phone.scrcpy.videoBuffer = value
             usePercentTooltip: false
         }
+
+        ConfigSlider {
+            text: Translation.tr("Audio buffer (ms)")
+            buttonIcon: "graphic_eq"
+            from: 50
+            to: 500
+            stepSize: 25
+            value: Config.options.phone.scrcpy.audioBuffer
+            onValueChanged: Config.options.phone.scrcpy.audioBuffer = value
+            usePercentTooltip: false
+        }
     }
 
     // ─── Behaviour toggles ─────────────────────────────────
@@ -609,7 +620,10 @@ ContentPage {
                     : 5555
             from: 1024
             to: 65535
-            onValueChanged: Config.options.phone.scrcpy.wirelessPort = String(value)
+            onValueChanged: {
+                if (!Config.options.phone.scrcpy.autoWirelessIp)
+                    Config.options.phone.scrcpy.wirelessPort = String(value)
+            }
         }
     }
 
