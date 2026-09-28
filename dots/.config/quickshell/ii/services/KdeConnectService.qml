@@ -269,48 +269,52 @@ Singleton {
     }
 
     Component.onCompleted: {
-        // Respect the Phone tab toggle. If the user has disabled the Phone
-        // tab in SidebarsConfig, we don't start the DBus monitor or any
-        // polling process — keeps memory/CPU at zero for users who don't
-        // use phone integration.
-        if (!root._enabled) return
+        // ADB and scrcpy belong to the Phone tab, independently of KDE Connect.
+        if (!root._phoneEnabled) return
         detectDistroProc.running = true
-        checkAvailabilityProc.running = true
         checkScrcpyProc.running = true
         checkAdbProc.running = true
-        checkPythonDbusProc.running = true
+        if (root._enabled) {
+            checkAvailabilityProc.running = true
+            checkPythonDbusProc.running = true
+        }
     }
 
-    // Reflects Config.options.policies.phone and Config.options.phone.kdeconnectEnabled.
-    // When false, the service stays dormant: no DBus monitor, no pgrep polling, no ADB probing.
-    readonly property bool _enabled: Config.options.policies.phone !== 0
+    readonly property bool _phoneEnabled: Config.options.policies.phone !== 0
+    // Only the KDE daemon and its DBus features follow this switch. ADB can
+    // still serve scrcpy, the camera and the microphone while it is off.
+    readonly property bool _enabled: root._phoneEnabled
         && (Config.options.phone.kdeconnectEnabled === undefined || Config.options.phone.kdeconnectEnabled)
 
     // Public read-only view for toggle models and dialogs that mirror the service state.
     readonly property bool serviceEnabled: root._enabled
 
-    // Stop all background activity when the Phone tab is toggled off at runtime.
-    // Restart when toggled back on. This lets users enable/disable Phone
-    // integration without reloading the shell.
-    on_EnabledChanged: {
-        if (root._enabled) {
-            // Re-enabled: spin the background workers back up.
+    on_PhoneEnabledChanged: {
+        if (root._phoneEnabled) {
             detectDistroProc.running = true
-            checkAvailabilityProc.running = true
             checkScrcpyProc.running = true
             checkAdbProc.running = true
+        } else {
+            adbProbeProc.running = false
+            root.adbReachable = false
+            root.resolvedAdbSerial = ""
+        }
+    }
+
+    // KDE Connect's toggle controls its daemon and DBus work only.
+    on_EnabledChanged: {
+        if (root._enabled) {
+            checkAvailabilityProc.running = true
             checkPythonDbusProc.running = true
         } else {
-            // Disabled: stop everything that consumes CPU/IPC.
+            // Keep the independent ADB probe and scrcpy capability available.
             monitorProc.running = false
             checkScrcpyRunningProc.running = false
-            checkScrcpyProc.running = false
-            adbProbeProc.running = false
-            adbProber.running = false
             scrcpyStatusTimer.running = false
             scrcpyLaunchFallbackTimer.running = false
             scrcpyElapsedTicker.running = false
-            // Reset user-facing state so UI doesn't show stale data.
+            root.ready = false
+            root.available = false
             root.scrcpyRunning = false
             root.scrcpyLaunching = false
             root.devices = []
@@ -324,14 +328,14 @@ Singleton {
         running: false
         command: ["bash", "-c", "command -v kdeconnect-cli >/dev/null"]
         onExited: (code, status) => {
+            if (!root._enabled) return
             root.available = (code === 0)
             if (root.available) {
                 root.startMonitor()
             } else {
-                // KDE Connect is the backbone of the entire Phone tab.
-                // If it's missing, warn the user immediately.
+                // Only KDE Connect features need this dependency.
                 root.criticalDepMissing("kdeconnect-cli",
-                    Translation.tr("KDE Connect is not installed — phone integration requires it"))
+                    Translation.tr("KDE Connect is not installed — its device features are unavailable"))
             }
         }
     }
@@ -442,13 +446,15 @@ Singleton {
         running: false
         command: ["pkill", "-f", "kdeconnect/monitor.py"]
         onExited: (code, status) => {
-            monitorProc.command = ProcUtils.pdeath(["python3", root._scriptPath])
-            monitorProc.running = true
+            if (root._enabled) {
+                monitorProc.command = ProcUtils.pdeath(["python3", root._scriptPath])
+                monitorProc.running = true
+            }
         }
     }
 
     function startMonitor() {
-        if (monitorProc.running) return
+        if (!root._enabled || monitorProc.running) return
         cleanupProc.running = true
     }
 
@@ -506,7 +512,7 @@ Singleton {
         interval: 4000
         repeat: false
         onTriggered: {
-            if (root.available && Persistent.ready) root.startMonitor()
+            if (root._enabled && root.available && Persistent.ready) root.startMonitor()
         }
     }
 
@@ -1104,7 +1110,8 @@ Singleton {
         id: adbProber
         interval: 30000
         repeat: true
-        running: root.ready && root._enabled
+        running: Config.ready && root._phoneEnabled
+        triggeredOnStart: true
         onTriggered: root._probeAdb()
     }
 
@@ -1275,7 +1282,7 @@ Singleton {
     // announce and goodbye as it happens, so a new port shows up within a
     // second instead of on the next poll. Only runs while wireless auto
     // mode is on.
-    readonly property bool _mdnsBrowseWanted: root.ready && root._enabled
+    readonly property bool _mdnsBrowseWanted: Config.ready && root._phoneEnabled
         && !!Config.options.phone && !!Config.options.phone.scrcpy
         && Config.options.phone.scrcpy.useWireless
         && Config.options.phone.scrcpy.autoWirelessIp
