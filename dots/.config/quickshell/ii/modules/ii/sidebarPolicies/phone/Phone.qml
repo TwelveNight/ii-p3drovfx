@@ -695,6 +695,24 @@ Item {
                 onRequestSettings: root.openSubPage("PhoneSettingsPage.qml")
             }
 
+            RippleButton {
+                Layout.fillWidth: true
+                Layout.preferredHeight: 40
+                visible: !KdeConnectService.activeReachable
+                    && (KdeConnectService.waydroidDevice?.reachable ?? false)
+                buttonRadius: Appearance.rounding.normal
+                colBackground: Appearance.colors.colSecondaryContainer
+                colBackgroundHover: Appearance.colors.colSecondaryContainerHover
+                contentItem: StyledText {
+                    anchors.centerIn: parent
+                    text: Translation.tr("Use connected Waydroid")
+                    color: Appearance.colors.colOnSecondaryContainer
+                    font.pixelSize: Appearance.font.pixelSize.small
+                    font.weight: Font.DemiBold
+                }
+                onClicked: KdeConnectService.selectWaydroid()
+            }
+
             // ───────── PAIRING REQUEST BANNERS ─────────
             Repeater {
                 model: KdeConnectService.pendingPairRequests
@@ -1531,4 +1549,3 @@ Item {
         }
     }
 }
-

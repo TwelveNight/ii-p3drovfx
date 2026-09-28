@@ -38,12 +38,15 @@ Singleton {
             const cached = root._getCachedNotifications(root.activeDeviceId)
             if (cached.length > 0) root.notifications = cached
         }
-    root._probeAdbDeviceName()
+        root._probeAdbDeviceName()
         root._pickMdnsHost()
+        if (root._phoneEnabled) root._probeAdb()
     }
 
     property var devices: []
     readonly property var activeDevice: root._findDevice(root.activeDeviceId)
+    readonly property bool activeIsWaydroid: /waydroid/i.test(root.activeDevice?.name || "")
+    readonly property var waydroidDevice: root.devices.find(d => /waydroid/i.test(d.name || "") && d.paired) || null
 
     /** Recent paired devices (excluding the active one) in MRU order.
      *  Backed by Persistent.states.sidebar.policies.phone.recentDeviceIds. */
@@ -254,6 +257,9 @@ Singleton {
                 activeDeviceId: KdeConnectService.activeDeviceId,
                 activeReachable: KdeConnectService.activeReachable,
                 activeName: dev ? dev.name : "(none)",
+                activeIsWaydroid: KdeConnectService.activeIsWaydroid,
+                adbReachable: KdeConnectService.adbReachable,
+                resolvedAdbSerial: KdeConnectService.resolvedAdbSerial,
                 activeBattery: dev ? dev.charge : -1,
                 notificationsCount: KdeConnectService.notificationCount,
                 monitorRunning: monitorProc.running,
@@ -262,6 +268,10 @@ Singleton {
 
         function ping(devId: string): void {
             KdeConnectService.sendPing(devId || KdeConnectService.activeDeviceId, "ping via ipc")
+        }
+
+        function selectWaydroid(): void {
+            KdeConnectService.selectWaydroid()
         }
 
         function shareFile(devId: string, path: string): void {
@@ -765,6 +775,11 @@ Singleton {
         requestNotificationsRefresh()
     }
 
+    function selectWaydroid() {
+        if (!root.waydroidDevice) return
+        root.selectDevice(root.waydroidDevice.id)
+    }
+
     function _persistActiveDeviceId(id) {
         if (!Persistent.ready) return
         try {
@@ -1121,23 +1136,35 @@ Singleton {
         running: false
         command: {
             const c = (Config.options.phone && Config.options.phone.scrcpy) ? Config.options.phone.scrcpy : null
-            const useWl = c && c.useWireless
-            const wantIp = useWl ? (root._kdeConnectIp(root.activeDeviceId) || (c.wirelessIp || "").trim()) : ""
+            const useWl = root.activeIsWaydroid || (c && c.useWireless)
+            const wantIp = root.activeIsWaydroid
+                ? root._kdeConnectIp(root.activeDeviceId)
+                : useWl ? (root._kdeConnectIp(root.activeDeviceId) || (c?.wirelessIp || "").trim()) : ""
             const fallback = useWl ? root._resolveWirelessHost(root.activeDeviceId) : ""
             const fb = fallback ? root._shellQuote(fallback) : "''"
             const existing = wantIp
                 ? "EXISTING=$(adb devices | awk -v ip=" + root._shellQuote(wantIp)
                     + " '$2==\"device\" && index($1, ip \":\")==1 {print $1; exit}'); "
                 : "EXISTING=''; "
-            const resolveIp = useWl
+            const resolveIp = root.activeIsWaydroid
+                ? "IP=" + fb + "; "
+                : useWl
                 ? "IP=$(" + root._mdnsDiscoverSnippet(wantIp) + "); "
                     + "if [ -n \"$IP\" ]; then echo \"MDNS:$IP\"; else "
                     + existing + "IP=${EXISTING:-" + fb + "}; fi; "
                 : "IP=''; "
-            const pinProbe = c && c.pinAdbPort
+            const pinProbe = !root.activeIsWaydroid && c && c.pinAdbPort
                 ? "PIN=\"$BASE:5555\"; adb connect \"$PIN\" >/dev/null 2>&1; "
                     + "PINOK=$(adb devices | awk -v p=\"$PIN\" '$1==p && $2==\"device\" {print p}'); "
                 : "PIN=''; PINOK=''; "
+            const wantedSerial = wantIp
+                ? "$(adb devices | awk -v ip=" + root._shellQuote(wantIp)
+                    + " '$2==\"device\" && index($1, ip \":\")==1 {print $1; exit}')"
+                : "''"
+            const chooseSerial = root.activeIsWaydroid
+                ? "SERIAL=" + wantedSerial + "; "
+                : "SERIAL=$(adb devices | awk '$2==\"device\" && index($1, \":\")==0 {print $1; exit}'); "
+                    + "if [ -z \"$SERIAL\" ]; then SERIAL=" + wantedSerial + "; fi; "
             return ["bash", "-c",
                 "if ! command -v adb >/dev/null 2>&1; then exit 1; fi; " +
                 resolveIp +
@@ -1153,12 +1180,9 @@ Singleton {
                 "  done; " +
                 "  if [ -n \"$PINOK\" ]; then echo \"PINNED:$PIN\"; else adb connect \"$IP\" >/dev/null 2>&1; fi; " +
                 "fi; " +
-                // A USB serial never contains a colon; prefer it over any
-                // network target so a plugged-in phone always wins. The pinned
-                // port comes next: it outlives the TLS port it was found with.
-                "SERIAL=$(adb devices | awk '$2==\"device\" {print $1}' | grep -v ':' | head -n1); " +
-                "if [ -z \"$SERIAL\" ]; then SERIAL=\"$PINOK\"; fi; " +
-                "if [ -z \"$SERIAL\" ]; then SERIAL=$(adb devices | awk '$2==\"device\" {print $1}' | head -n1); fi; " +
+                // The selected device must never inherit another device's
+                // ADB status, even when that is the only attached serial.
+                chooseSerial +
                 "echo \"COUNT:$(adb devices | awk '$2==\"device\"' | wc -l)\"; " +
                 "if [ -n \"$SERIAL\" ]; then echo \"SERIAL:$SERIAL\"; exit 0; fi; " +
                 "exit 1"]
@@ -1929,6 +1953,11 @@ Singleton {
     /** Auto mode follows the current mDNS port or an already connected ADB
      *  serial. The configured port belongs to manual and legacy TCP modes. */
     function _resolveWirelessHost(devId) {
+        const dev = root._findDevice(devId || root.activeDeviceId)
+        if (dev && /waydroid/i.test(dev.name || "")) {
+            const ip = root._kdeConnectIp(devId)
+            return ip ? ip + ":5555" : ""
+        }
         const c = (Config.options.phone && Config.options.phone.scrcpy) ? Config.options.phone.scrcpy : null
         if (!c) return ""
         const wantedIp = root._kdeConnectIp(devId) || (c.wirelessIp || "").trim()
@@ -1957,19 +1986,20 @@ Singleton {
      * ip:port target. The short `-s` form is accepted by both adb and scrcpy.
      */
     function adbTargetArgs() {
-        // With a single attached device, naming it is pure downside: adb
-        // already targets it implicitly, and a wireless serial resolved a
-        // moment ago may point at a port the phone has since re-rolled.
-        if (root.adbDeviceCount === 1)
-            return []
-        if (root.resolvedAdbSerial)
+        if (root.activeIsWaydroid) {
+            const host = root._resolveWirelessHost(root.activeDeviceId)
+            return ["-s", host || "unavailable-" + root.activeDeviceId]
+        }
+        if (root.resolvedAdbSerial && root.resolvedAdbSerial.indexOf(":") < 0)
             return ["-s", root.resolvedAdbSerial]
-        const scrcpyConfig = Config.options?.phone?.scrcpy
-        if (!scrcpyConfig?.useWireless)
-            return []
-
-        const host = root.resolvedWirelessHost
-        return host ? ["-s", host] : []
+        const c = Config.options?.phone?.scrcpy
+        if (c?.useWireless) {
+            const host = root._resolveWirelessHost(root.activeDeviceId)
+            if (host) return ["-s", host]
+            const ip = (c.wirelessIp || "").trim()
+            if (ip) return ["-s", ip.includes(":") ? ip : ip + ":" + (c.wirelessPort || "5555")]
+        }
+        return ["-s", "unavailable-" + root.activeDeviceId]
     }
 
     function launchScrcpy(devId, mode, deepLink) {

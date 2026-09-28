@@ -81,15 +81,19 @@ class ScrcpySessionManager:
 
             if wanted and (wanted in usb_devices or wanted in ip_devices):
                 return ["-s", wanted]
+            # An explicit device must never fall through to another USB or
+            # network device (for example, the physical phone instead of
+            # Waydroid). Only a changed port on the same host may replace it.
+            if wanted:
+                if ":" in wanted:
+                    host = wanted.rsplit(":", 1)[0] + ":"
+                    same_host = [s for s in ip_devices if s.startswith(host)]
+                    if same_host:
+                        pinned = [s for s in same_host if s.endswith(":5555")]
+                        return ["-s", (pinned or same_host)[0]]
+                return ["-s", wanted]
             if usb_devices:
                 return ["-s", usb_devices[0]]
-            # The port is what goes stale, not the address: with two phones
-            # on the network, falling back must not land on the other one.
-            if ":" in wanted:
-                host = wanted.rsplit(":", 1)[0] + ":"
-                same_host = [s for s in ip_devices if s.startswith(host)]
-                if same_host:
-                    ip_devices = same_host
             pinned = [s for s in ip_devices if s.endswith(":5555")]
             if pinned:
                 return ["-s", pinned[0]]
@@ -106,15 +110,23 @@ class ScrcpySessionManager:
         was typed right behind it."""
         with self.lock:
             if self.listing:
+                self.pending_listing = (target_args, device_id)
                 return
             self.listing = True
 
         def work():
-            try:
-                self.list_apps(target_args=target_args, device_id=device_id)
-            finally:
+            current = (target_args, device_id)
+            while True:
+                try:
+                    self.list_apps(target_args=current[0], device_id=current[1])
+                except Exception as e:
+                    self.emit({"event": "apps_error", "deviceId": current[1], "message": str(e)})
                 with self.lock:
-                    self.listing = False
+                    current = getattr(self, "pending_listing", None)
+                    self.pending_listing = None
+                    if current is None:
+                        self.listing = False
+                        return
 
         threading.Thread(target=work, daemon=True).start()
 
@@ -164,6 +176,7 @@ class ScrcpySessionManager:
             if not apps and not device_ok:
                 self.emit({
                     "event": "apps_error",
+                    "deviceId": device_id,
                     "message": "Phone not reachable over ADB"
                 })
                 return
@@ -200,6 +213,7 @@ class ScrcpySessionManager:
         except Exception as e:
             self.emit({
                 "event": "apps_error",
+                "deviceId": device_id,
                 "message": f"Failed to list apps: {e}"
             })
 
