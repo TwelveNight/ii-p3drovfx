@@ -27,7 +27,7 @@ ContentPage {
     signal goBack()
 
     readonly property bool _ready: KdeConnectService.scrcpyAvailable
-        && KdeConnectService.activeReachable
+        && (KdeConnectService.adbReachable || KdeConnectService.resolvedWirelessHost !== "")
 
     // Slide-up entrance when the sub-page overlay loads.
     opacity: 0
@@ -122,7 +122,7 @@ ContentPage {
                     text: KdeConnectService.scrcpyRunning
                         ? Translation.tr("Running")
                         : (KdeConnectService.scrcpyAvailable
-                            ? (KdeConnectService.activeReachable
+                            ? (root._ready
                                 ? Translation.tr("Ready")
                                 : Translation.tr("Offline"))
                             : Translation.tr("Unavailable"))
@@ -140,12 +140,12 @@ ContentPage {
     // ─── Error / offline banner ────────────────────────────
     WarningBox {
         Layout.fillWidth: true
-        visible: !KdeConnectService.scrcpyAvailable || !KdeConnectService.activeReachable
+        visible: !root._ready
         materialIcon: !KdeConnectService.scrcpyAvailable ? "download"
                     : "phonelink_off"
         text: !KdeConnectService.scrcpyAvailable
             ? Translation.tr("scrcpy is not installed. Install scrcpy and android-tools to mirror your phone screen.")
-            : Translation.tr("No reachable KDE Connect device. Pair a device first.")
+            : Translation.tr("No ADB device found. Connect via USB or enable Wireless debugging on the phone.")
 
         RippleButton {
             visible: !KdeConnectService.scrcpyAvailable
@@ -277,7 +277,7 @@ ContentPage {
                 buttonRadius: Appearance.rounding.normal
                 colBackground: Appearance.colors.colLayer2
                 colBackgroundHover: Appearance.colors.colLayer2Hover
-                enabled: KdeConnectService.activeReachable
+                enabled: KdeConnectService.scrcpyAvailable
                 opacity: enabled ? 1.0 : 0.5
                 contentItem: RowLayout {
                     spacing: 6
@@ -298,7 +298,7 @@ ContentPage {
                 onClicked: KdeConnectService.promptWirelessConnect(KdeConnectService.activeDeviceId)
                 StyledToolTip {
                     text: Config.options.phone.scrcpy.autoWirelessIp
-                        ? Translation.tr("Connect wirelessly using the auto-detected IP")
+                        ? Translation.tr("Connect wirelessly using the current ADB address and port")
                         : Translation.tr("Prompt for IP:port and switch to wireless mode")
                 }
             }
@@ -309,7 +309,7 @@ ContentPage {
                 buttonRadius: Appearance.rounding.normal
                 colBackground: Appearance.colors.colLayer2
                 colBackgroundHover: Appearance.colors.colLayer2Hover
-                enabled: KdeConnectService.activeReachable
+                enabled: KdeConnectService.adbReachable
                 opacity: enabled ? 1.0 : 0.5
                 contentItem: RowLayout {
                     spacing: 6
@@ -466,7 +466,7 @@ ContentPage {
                 buttonRadius: Appearance.rounding.normal
                 colBackground: Appearance.colors.colLayer2
                 colBackgroundHover: Appearance.colors.colLayer2Hover
-                enabled: KdeConnectService.activeReachable && KdeConnectService.adbReachable
+                enabled: KdeConnectService.adbReachable
                 opacity: enabled ? 1.0 : 0.5
                 contentItem: RowLayout {
                     spacing: 6
@@ -542,7 +542,7 @@ ContentPage {
         ConfigSwitch {
             visible: Config.options.phone.scrcpy.useWireless
             buttonIcon: "sync_alt"
-            text: Translation.tr("Auto-detect IP (KDE Connect)")
+            text: Translation.tr("Auto-detect ADB address and port")
             checked: Config.options.phone.scrcpy.autoWirelessIp
             onCheckedChanged: Config.options.phone.scrcpy.autoWirelessIp = checked
         }
@@ -578,7 +578,7 @@ ContentPage {
                     Layout.fillWidth: true
                     text: KdeConnectService.resolvedWirelessHost !== ""
                         ? Translation.tr("Will connect to %1").arg(KdeConnectService.resolvedWirelessHost)
-                        : Translation.tr("Waiting for KDE Connect to report the phone's IP…")
+                        : Translation.tr("Waiting for the wireless debugging service or an ADB connection…")
                     font.pixelSize: Appearance.font.pixelSize.small
                     font.weight: Font.DemiBold
                     color: KdeConnectService.resolvedWirelessHost !== ""
