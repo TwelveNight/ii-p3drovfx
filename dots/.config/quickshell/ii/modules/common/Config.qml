@@ -2683,6 +2683,9 @@ Singleton {
                 // Keep phone notifications in the desktop list/popups too, not only the Phone tab
                 property bool mirrorNotificationsToDesktop: true
                 property bool showPeripheralCards: true
+                property JsonObject waydroidFlex: JsonObject {
+                    property string bitRate: "4M"
+                }
                 property JsonObject contacts: JsonObject {
                     property bool enabled: true
                     property list<string> favoriteIds: []
