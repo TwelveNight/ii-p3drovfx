@@ -335,6 +335,43 @@ ContentPage {
         }
     }
 
+    // Waydroid is a separate local Android target. Keep its ADB serial and
+    // Codec2 settings out of the physical phone's saved scrcpy options.
+    ContentSection {
+        icon: "android"
+        title: Translation.tr("Waydroid")
+
+        RippleButton {
+            Layout.fillWidth: true
+            Layout.preferredHeight: 48
+            buttonRadius: Appearance.rounding.normal
+            colBackground: Appearance.colors.colSecondaryContainer
+            colBackgroundHover: Appearance.colors.colSecondaryContainerHover
+            enabled: KdeConnectService.scrcpyAvailable
+            opacity: enabled ? 1.0 : 0.5
+            contentItem: RowLayout {
+                spacing: 8
+                MaterialSymbol {
+                    Layout.alignment: Qt.AlignVCenter
+                    text: "open_in_new"
+                    iconSize: 20
+                    color: Appearance.colors.colOnSecondaryContainer
+                }
+                StyledText {
+                    Layout.alignment: Qt.AlignVCenter
+                    text: Translation.tr("Open Waydroid Flex")
+                    font.pixelSize: Appearance.font.pixelSize.small
+                    font.weight: Font.DemiBold
+                    color: Appearance.colors.colOnSecondaryContainer
+                }
+            }
+            onClicked: Quickshell.execDetached(["python3", Quickshell.shellPath("scripts/phone/waydroid_flex.py")])
+            StyledToolTip {
+                text: Translation.tr("Start Waydroid and open a resizable Android window")
+            }
+        }
+    }
+
     // ─── Display settings ──────────────────────────────────
     ContentSection {
         icon: "video_settings"
