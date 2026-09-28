@@ -1025,7 +1025,11 @@ Item {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 Layout.margins: 14
-                visible: root.kdeConnectOffline && !PhoneScrcpyService.appModeSupported
+                // The KDE Connect placeholder must not cover independent
+                // peripheral controls or their install buttons.
+                visible: root.kdeConnectOffline
+                    && !PhoneScrcpyService.appModeSupported
+                    && !Config.options.phone.showPeripheralCards
                 // When invisible, this ColumnLayout's children include a
                 // RippleButton ("Install KDE Connect") whose MouseArea could
                 // still be enabled if the parent reports visibility async.

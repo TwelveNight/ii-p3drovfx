@@ -57,7 +57,7 @@ Rectangle {
     }
 
     // ─── Feature state (shared by the rail, the pills and the panels) ───
-    readonly property bool _scrcpyPresent: KdeConnectService.scrcpyAvailable
+    readonly property bool _scrcpyPresent: PhoneScrcpyService.available
     readonly property bool _droidcamPresent: PhoneCameraService.available
     readonly property bool _micPresent: PhoneMicService.available
     // Each peripheral has its own transport; a configured camera target does not
@@ -78,17 +78,17 @@ Rectangle {
     readonly property bool mirrorEmbedded: root.embedEnabled && PhoneMirrorService.running
 
     readonly property string mirrorState: !root._scrcpyPresent ? "unavailable"
-        : !root._mirrorTarget || root.mirrorError.length > 0 ? "offline"
         : (root.mirrorEmbedded || root.mirrorRunning) ? "active"
-        : root.mirrorLaunching ? "connecting" : "ready"
+        : root.mirrorLaunching ? "connecting"
+        : !root._mirrorTarget || root.mirrorError.length > 0 ? "offline" : "ready"
     readonly property string webcamState: !root._droidcamPresent ? "unavailable"
-        : !root._webcamTarget ? "offline"
         : PhoneCameraService.connecting ? "connecting"
-        : PhoneCameraService.running ? "active" : "ready"
+        : PhoneCameraService.running ? "active"
+        : !root._webcamTarget ? "offline" : "ready"
     readonly property string micState: !root._micPresent ? "unavailable"
-        : !root._micTarget ? "offline"
         : PhoneMicService.connecting ? "connecting"
-        : PhoneMicService.running ? "active" : "ready"
+        : PhoneMicService.running ? "active"
+        : !root._micTarget ? "offline" : "ready"
     readonly property var featureStates: [root.mirrorState, root.webcamState, root.micState]
 
     readonly property var tabs: [
@@ -370,10 +370,10 @@ Rectangle {
             mainSymbol: !root._scrcpyPresent ? "download"
                 : root.embedEnabled ? "view_sidebar"
                 : root.mirrorRunning ? "stop" : "open_in_new"
-            mainEnabled: !root._scrcpyPresent || root._mirrorTarget
+            mainEnabled: true
             showStop: root.mirrorEmbedded || (root.embedEnabled && root.mirrorRunning)
             settingsPage: "PhoneScrcpyPage.qml"
-            error: root._scrcpyPresent && root._mirrorTarget ? root.mirrorError.split("\n")[0] : ""
+            error: root._scrcpyPresent ? root.mirrorError.split("\n")[0] : ""
             detail: root.mirrorEmbedded || root.mirrorRunning
                 ? [root.mirrorEmbedded ? Translation.tr("In the sidebar") : Translation.tr("In a window"),
                    Config.options.phone.scrcpy.useWireless
@@ -445,7 +445,7 @@ Rectangle {
                 : root.webcamState === "active" ? Translation.tr("Stop") : Translation.tr("Start")
             mainSymbol: !root._droidcamPresent ? "download"
                 : root.webcamState === "active" ? "stop" : "play_arrow"
-            mainEnabled: !root._droidcamPresent || root._webcamTarget
+            mainEnabled: true
             settingsPage: "PhoneWebcamPage.qml"
             error: root._droidcamPresent && !PhoneCameraService.running ? PhoneCameraService.lastError.split("\n")[0] : ""
             detail: PhoneCameraService.running
@@ -500,7 +500,7 @@ Rectangle {
                 : root.micState === "active" ? Translation.tr("Stop") : Translation.tr("Start")
             mainSymbol: !root._micPresent ? "download"
                 : root.micState === "active" ? "stop" : "play_arrow"
-            mainEnabled: !root._micPresent || root._micTarget
+            mainEnabled: true
             settingsPage: "PhoneMicPage.qml"
             error: root._micPresent && !PhoneMicService.running ? PhoneMicService.lastError.split("\n")[0] : ""
             detail: PhoneMicService.running
