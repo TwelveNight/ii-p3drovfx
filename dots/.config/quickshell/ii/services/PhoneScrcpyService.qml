@@ -12,6 +12,27 @@ import qs.services
 Singleton {
     id: root
 
+    IpcHandler {
+        target: "phoneScrcpy"
+
+        function status(): string {
+            return JSON.stringify({
+                target: KdeConnectService.activeDeviceDisplayName,
+                waydroid: KdeConnectService.activeIsWaydroid,
+                appModeSupported: root.appModeSupported,
+                apps: root.apps.length,
+                appsLoading: root.appsLoading,
+                appsError: root.appsError,
+                sessions: root.sessions.map(s => s.id),
+                lastFailure: root.lastFailure
+            })
+        }
+
+        function launchApp(packageName: string): void {
+            root.launchApp(packageName)
+        }
+    }
+
     // Capabilities
     property bool available: false
     property string version: ""
@@ -24,6 +45,7 @@ Singleton {
     property bool mirrorLaunching: false
     property int mirrorElapsedMs: 0
     property string mirrorLaunchError: ""
+    property string lastFailure: ""
 
     // The mirror the Phone sidebar draws inside itself. Same session manager,
     // same auto-resume, but its window is never meant to be looked at
@@ -72,6 +94,8 @@ Singleton {
         target: KdeConnectService
         ignoreUnknownSignals: true
         function onActiveDeviceIdChanged() {
+            root.apps = []
+            root._updateFilteredApps()
             root.refreshCapabilities()
             root.refreshApps()
         }
@@ -245,6 +269,7 @@ Singleton {
     readonly property bool islandShowsFailures: IslandPolicy.enabled && IslandPolicy.widgetEnabled("phoneMirrorError")
 
     function reportFailure(sessionId: string, reason: string): void {
+        root.lastFailure = sessionId + ": " + reason
         const title = sessionId.startsWith("app:")
             ? Translation.tr("%1 could not be mirrored").arg(root._appLabel(sessionId.substring(4)))
             : sessionId === root.recordSessionId
@@ -330,6 +355,11 @@ Singleton {
      *  "Turn screen off", "Stay awake" and every quality setting silently
      *  applied to the mirror only. */
     function _commonScrcpyArgs() {
+        if (KdeConnectService.activeIsWaydroid) {
+            const rate = Config.options?.phone?.waydroidFlex?.bitRate || "4M"
+            return ["--no-audio", "--video-encoder=c2.android.avc.encoder",
+                    "--video-bit-rate=" + rate, "--max-fps=60"]
+        }
         const opts = Config.options?.phone?.scrcpy
         if (!opts) return []
 
@@ -362,10 +392,10 @@ Singleton {
         const opts = Config.options?.phone?.scrcpy
         if (opts) {
             const appOpts = opts.appMode || {}
-            if (appOpts.flexDisplay) {
-                const w = appOpts.displayWidth || 1280
-                const h = appOpts.displayHeight || 960
-                const density = appOpts.density || 160
+            if (appOpts.flexDisplay || KdeConnectService.activeIsWaydroid) {
+                const w = KdeConnectService.activeIsWaydroid ? 540 : (appOpts.displayWidth || 1280)
+                const h = KdeConnectService.activeIsWaydroid ? 960 : (appOpts.displayHeight || 960)
+                const density = KdeConnectService.activeIsWaydroid ? 180 : (appOpts.density || 160)
                 extraArgs.push("--new-display=" + w + "x" + h + "/" + density)
                 extraArgs.push("--flex-display")
                 if (appOpts.keepActive) {
@@ -511,6 +541,13 @@ Singleton {
         const args = ["--window-borderless"]
         if (streamSize > 0) args.push("--max-size=" + streamSize)
 
+        if (KdeConnectService.activeIsWaydroid) {
+            args.push("--no-audio", "--video-encoder=c2.android.avc.encoder")
+            args.push("--video-bit-rate=" + (Config.options?.phone?.waydroidFlex?.bitRate || "4M"))
+            args.push("--max-fps=60")
+            return args
+        }
+
         const opts = Config.options?.phone?.scrcpy
         if (opts) {
             if (opts.stayAwake) args.push("--stay-awake")
@@ -563,10 +600,10 @@ Singleton {
     function _launchApp(packageName: string, targetArgs): void {
         const sessionId = "app:" + packageName
         const appOpts = Config.options?.phone?.scrcpy?.appMode || {}
-        const useFlex = appOpts.flexDisplay ?? false
-        const w = appOpts.displayWidth || 1280
-        const h = appOpts.displayHeight || 960
-        const density = appOpts.density || 160
+        const useFlex = KdeConnectService.activeIsWaydroid || (appOpts.flexDisplay ?? false)
+        const w = KdeConnectService.activeIsWaydroid ? 540 : (appOpts.displayWidth || 1280)
+        const h = KdeConnectService.activeIsWaydroid ? 960 : (appOpts.displayHeight || 960)
+        const density = KdeConnectService.activeIsWaydroid ? 180 : (appOpts.density || 160)
 
         // A '+' force-stops the app before starting it. On a virtual display
         // that is mandatory: Android resumes an app that is already running in
@@ -595,12 +632,13 @@ Singleton {
         root._send(root._launchPayload(sessionId, "app", targetArgs, extraArgs))
 
         // Record in recents
-        let recents = (Persistent.states?.phone?.scrcpy?.recentPackages || []).slice()
+        let recents = (Persistent.states?.sidebar?.policies?.phone?.scrcpy?.recentPackages || []).slice()
         const idx = recents.indexOf(packageName)
         if (idx >= 0) recents.splice(idx, 1)
         recents.unshift(packageName)
         if (recents.length > 20) recents = recents.slice(0, 20)
-        Persistent.states.phone.scrcpy.recentPackages = recents
+        if (Persistent.states?.sidebar?.policies?.phone?.scrcpy)
+            Persistent.states.sidebar.policies.phone.scrcpy.recentPackages = recents
 
         KdeConnectService.dispatchActionFeedback(Translation.tr("Launching %1…").arg(packageName.split(".").pop()), true)
     }
@@ -724,8 +762,8 @@ Singleton {
             "extra_args": extraArgs,
             // "continue" is already carried by --no-vd-destroy-content; only
             // "lock" needs the manager to act after the window is gone.
-            "end_action": root._sessionEndMode() === "lock" ? "lock" : "",
-            "auto_unlock": Config.options?.phone?.scrcpy?.appMode?.autoUnlock ?? true
+            "end_action": !KdeConnectService.activeIsWaydroid && root._sessionEndMode() === "lock" ? "lock" : "",
+            "auto_unlock": KdeConnectService.activeIsWaydroid ? false : (Config.options?.phone?.scrcpy?.appMode?.autoUnlock ?? true)
         }
     }
 
@@ -872,10 +910,12 @@ Singleton {
                     const ev = msg.event
 
                     if (ev === "apps_list") {
+                        if (msg.deviceId !== KdeConnectService.activeDeviceId) return
                         root.apps = msg.apps || []
                         root.appsLoading = false
                         root.appsError = ""
                     } else if (ev === "apps_error") {
+                        if (msg.deviceId !== KdeConnectService.activeDeviceId) return
                         root.appsLoading = false
                         root.appsError = msg.message || "Failed to list apps"
                     } else if (ev === "started") {
