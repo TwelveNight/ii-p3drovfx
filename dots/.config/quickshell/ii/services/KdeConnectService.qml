@@ -139,6 +139,7 @@ Singleton {
         root.devices
         root.activeDeviceId
         root.mdnsWirelessHost
+        root.resolvedAdbSerial
         const c = (Config.options.phone && Config.options.phone.scrcpy) ? Config.options.phone.scrcpy : null
         if (c) {
             c.autoWirelessIp
@@ -1121,24 +1122,29 @@ Singleton {
         command: {
             const c = (Config.options.phone && Config.options.phone.scrcpy) ? Config.options.phone.scrcpy : null
             const useWl = c && c.useWireless
-            const wantIp = useWl ? root._kdeConnectIp(root.activeDeviceId) : ""
+            const wantIp = useWl ? (root._kdeConnectIp(root.activeDeviceId) || (c.wirelessIp || "").trim()) : ""
             const fallback = useWl ? root._resolveWirelessHost(root.activeDeviceId) : ""
             const fb = fallback ? root._shellQuote(fallback) : "''"
+            const existing = wantIp
+                ? "EXISTING=$(adb devices | awk -v ip=" + root._shellQuote(wantIp)
+                    + " '$2==\"device\" && index($1, ip \":\")==1 {print $1; exit}'); "
+                : "EXISTING=''; "
             const resolveIp = useWl
                 ? "IP=$(" + root._mdnsDiscoverSnippet(wantIp) + "); "
-                    + "if [ -n \"$IP\" ]; then echo \"MDNS:$IP\"; else IP=" + fb + "; fi; "
+                    + "if [ -n \"$IP\" ]; then echo \"MDNS:$IP\"; else "
+                    + existing + "IP=${EXISTING:-" + fb + "}; fi; "
                 : "IP=''; "
+            const pinProbe = c && c.pinAdbPort
+                ? "PIN=\"$BASE:5555\"; adb connect \"$PIN\" >/dev/null 2>&1; "
+                    + "PINOK=$(adb devices | awk -v p=\"$PIN\" '$1==p && $2==\"device\" {print p}'); "
+                : "PIN=''; PINOK=''; "
             return ["bash", "-c",
                 "if ! command -v adb >/dev/null 2>&1; then exit 1; fi; " +
                 resolveIp +
                 "if [ -n \"$IP\" ]; then " +
                 "  BASE=${IP%:*}; " +
-                "  PIN=\"$BASE:5555\"; " +
-                // A classic-TCP port pinned with `adb tcpip 5555` keeps
-                // answering across the random TLS re-rolls, so it is tried
-                // first and never torn down.
-                "  adb connect \"$PIN\" >/dev/null 2>&1; " +
-                "  PINOK=$(adb devices | awk -v p=\"$PIN\" '$1==p && $2==\"device\" {print p}'); " +
+                // Try the classic TCP port only when the user chose to pin it.
+                pinProbe +
                 // Android re-rolls the wireless-debugging port on every toggle,
                 // leaving adb holding a dead `ip:oldport` entry that would keep
                 // answering `adb devices`. Drop same-IP/other-port entries first.
@@ -1337,10 +1343,11 @@ Singleton {
         root._pickMdnsHost()
     }
 
-    /** Prefers the service on the active device's KDE Connect address, so
-     *  a second phone on the network doesn't win. */
+    /** Selects the service matching the configured or KDE Connect address.
+     *  Without an address, use the first phone discovered on the LAN. */
     function _pickMdnsHost() {
-        const want = root._kdeConnectIp(root.activeDeviceId)
+        const c = Config.options.phone?.scrcpy
+        const want = root._kdeConnectIp(root.activeDeviceId) || (c?.wirelessIp || "").trim()
         let first = ""
         for (const k in root._mdnsServices) {
             const host = root._mdnsServices[k]
@@ -1350,7 +1357,7 @@ Singleton {
             }
             if (!first) first = host
         }
-        root.mdnsWirelessHost = first
+        root.mdnsWirelessHost = want ? "" : first
     }
 
     /** Host the last reconnect probe was fired for, so re-announces of the
@@ -1895,13 +1902,13 @@ Singleton {
      *  `wantIp` is given, the line whose address matches it wins (so the
      *  right phone is picked with several on the LAN); otherwise the first
      *  discovered service is used. Prints nothing if avahi is missing or no
-     *  service is advertised. */
+     *  matching service is advertised. */
     function _mdnsDiscoverSnippet(wantIp) {
         const want = root._shellQuote(wantIp || "")
         return "avahi-browse -rpt _adb-tls-connect._tcp 2>/dev/null | "
             + "awk -F';' -v want=" + want + " '"
-            + "/^=/ { if (want != \"\" && $8 == want) { print $8\":\"$9; found = 1; exit } "
-            + "if (f == \"\") f = $8\":\"$9 } "
+            + "/^=/ && $3 == \"IPv4\" { if (want != \"\" && $8 == want) { print $8\":\"$9; found = 1; exit } "
+            + "if (want == \"\" && f == \"\") f = $8\":\"$9 } "
             + "END { if (!found && f != \"\") print f }'"
     }
 
@@ -1919,26 +1926,25 @@ Singleton {
         return ""
     }
 
-    /** Resolves the wireless ADB target as "ip:port". In auto mode the IP
-     *  comes from KDE Connect (falling back to the manual field if KDE
-     *  Connect has nothing yet); in manual mode it's the configured field.
-     *  Returns "" when no IP is available. */
+    /** Auto mode follows the current mDNS port or an already connected ADB
+     *  serial. The configured port belongs to manual and legacy TCP modes. */
     function _resolveWirelessHost(devId) {
         const c = (Config.options.phone && Config.options.phone.scrcpy) ? Config.options.phone.scrcpy : null
         if (!c) return ""
-        // Auto mode: prefer the mDNS-discovered host — it carries the phone's
-        // current wireless-debugging port. Only trust the cache when its IP
-        // matches this device (or the device's IP is unknown).
+        const wantedIp = root._kdeConnectIp(devId) || (c.wirelessIp || "").trim()
         if (c.autoWirelessIp && root.mdnsWirelessHost.indexOf(":") > 0) {
             const mip = root.mdnsWirelessHost.split(":")[0]
-            const kip = root._kdeConnectIp(devId)
-            if (!kip || mip === kip) return root.mdnsWirelessHost
+            if (!wantedIp || mip === wantedIp) return root.mdnsWirelessHost
+        }
+        if (c.autoWirelessIp) {
+            const serial = root.resolvedAdbSerial
+            if (serial.indexOf(":") > 0 && (!wantedIp || serial.split(":")[0] === wantedIp))
+                return serial
+            return ""
         }
         const port = (c.wirelessPort && String(c.wirelessPort).trim() !== "")
             ? String(c.wirelessPort).trim() : "5555"
-        let ip = ""
-        if (c.autoWirelessIp) ip = root._kdeConnectIp(devId)
-        if (!ip) ip = (c.wirelessIp || "").trim()
+        const ip = (c.wirelessIp || "").trim() || wantedIp
         if (!ip) return ""
         return (ip.indexOf(":") < 0) ? (ip + ":" + port) : ip
     }
@@ -1967,8 +1973,6 @@ Singleton {
     }
 
     function launchScrcpy(devId, mode, deepLink) {
-        if (!devId) return
-
         // Pre-flight check: ADB must be reachable (USB debugging or wireless).
         // Without it, scrcpy has no device to connect to and the error is
         // just "unknown" — unhelpful. Early return with a descriptive message.
@@ -1997,7 +2001,7 @@ Singleton {
         scrcpyLaunchFallbackTimer.restart()
         const dev = root._findDevice(devId)
         const name = dev ? dev.name : ""
-        const nick = "ii scrcpy - " + (name || devId)
+        const nick = "ii scrcpy - " + (name || devId || "Android")
 
         let scrcpyArgs = [
             "scrcpy",
@@ -2079,9 +2083,9 @@ Singleton {
         } else if (useWireless) {
             // Android 11+ wireless debugging uses a RANDOM port that changes
             // on every toggle/reboot, so resolve the live ip:port via mDNS
-            // (avahi) at launch time. Fall back to the KDE Connect / manual
-            // host (e.g. legacy `adb tcpip 5555`) when mDNS finds nothing.
-            const wantIp = root._kdeConnectIp(devId)
+            // (avahi) at launch time. Fall back to an already connected ADB
+            // serial; a manual fixed port is used only in manual mode.
+            const wantIp = root._kdeConnectIp(devId) || (Config.options.phone?.scrcpy?.wirelessIp || "").trim()
             const fallback = root._resolveWirelessHost(devId)
             const fb = fallback ? root._shellQuote(fallback) : "''"
             baseCmd = "HOST=$(" + root._mdnsDiscoverSnippet(wantIp) + "); "
