@@ -2505,6 +2505,7 @@ Singleton {
                     property string bitRate: "8M"
                     property int maxSize: 0
                     property int videoBuffer: 0  // scrcpy 4.0 default is 0ms — 80ms adds visible latency
+                    property int audioBuffer: 200  // tolerate jitter on wireless ADB; adjustable in Phone settings
                     property bool useWireless: false
                     property bool autoWirelessIp: true  // resolve IP live from KDE Connect instead of the manual field
                     // Android 11+ wireless debugging re-rolls its port whenever adbd restarts (a screen
