@@ -10,6 +10,10 @@ hl.window_rule({ match = { class = "^(feh)$" }, float = true })
 hl.window_rule({ match = { class = "^(wemeetapp)$" }, float = true })
 hl.window_rule({ match = { class = "^(xdg-desktop-portal-gtk)$" }, float = true })
 hl.window_rule({ match = { class = "^(pavucontrol-qt)$" }, float = true })
+-- Waydroid's Android display uses a fixed phone-sized resolution per session.
+hl.window_rule({ match = { class = "^Waydroid$" }, float = true })
+hl.window_rule({ match = { class = "^Waydroid$" }, size = { "540", "960" } })
+hl.window_rule({ match = { class = "^Waydroid$" }, center = true })
 
 -- Clash Verge
 hl.window_rule({ match = { class = "^(clash-verge)$" }, float = true })
