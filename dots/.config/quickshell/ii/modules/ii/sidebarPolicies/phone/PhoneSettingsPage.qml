@@ -161,12 +161,12 @@ Item {
                 }
                 ToggleRow {
                     symbol: "sync_alt"
-                    title: Translation.tr("Auto-detect IP (KDE Connect)")
+                    title: Translation.tr("Auto-detect ADB address and port")
                     description: !root.scrcpy.useWireless ? ""
                         : root.scrcpy.autoWirelessIp
                             ? (KdeConnectService.resolvedWirelessHost !== ""
                                 ? Translation.tr("Will connect to %1").arg(KdeConnectService.resolvedWirelessHost)
-                                : Translation.tr("Waiting for KDE Connect to report the phone's IP…"))
+                                : Translation.tr("Waiting for the wireless debugging service or an ADB connection…"))
                             : ""
                     enabled: root.scrcpy.useWireless
                     checked: root.scrcpy.autoWirelessIp
