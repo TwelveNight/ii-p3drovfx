@@ -343,6 +343,25 @@ ContentPage {
 
         RippleButton {
             Layout.fillWidth: true
+            Layout.preferredHeight: 40
+            buttonRadius: Appearance.rounding.normal
+            colBackground: Appearance.colors.colSecondaryContainer
+            colBackgroundHover: Appearance.colors.colSecondaryContainerHover
+            enabled: KdeConnectService.waydroidDevice !== null
+            contentItem: StyledText {
+                anchors.centerIn: parent
+                text: KdeConnectService.activeIsWaydroid
+                    ? Translation.tr("Waydroid selected in Phone")
+                    : Translation.tr("Use Waydroid in Phone")
+                color: Appearance.colors.colOnSecondaryContainer
+                font.pixelSize: Appearance.font.pixelSize.small
+                font.weight: Font.DemiBold
+            }
+            onClicked: KdeConnectService.selectWaydroid()
+        }
+
+        RippleButton {
+            Layout.fillWidth: true
             Layout.preferredHeight: 48
             buttonRadius: Appearance.rounding.normal
             colBackground: Appearance.colors.colSecondaryContainer
