@@ -66,7 +66,11 @@ Singleton {
     readonly property bool activeReachable: root.activeDevice
         ? (root.activeDevice.reachable === true)
         : false
-    onActiveReachableChanged: SoundService.playEvent("devices", root.activeReachable ? "device-added" : "device-removed")
+    onActiveReachableChanged: {
+        SoundService.playEvent("devices", root.activeReachable ? "device-added" : "device-removed")
+        if (root.activeReachable && root._phoneEnabled)
+            Qt.callLater(() => root._probeAdb())
+    }
     readonly property bool activeHasNotifications: root.activeDeviceId !== ""
         && root._devicePlugins(root.activeDeviceId).indexOf("kdeconnect_notifications") >= 0
     readonly property bool scrcpyAvailable: root._scrcpyAvailable
@@ -96,6 +100,7 @@ Singleton {
      *  quick actions (screenshot, power key, volume, am start). */
     property bool adbReachable: false
     property string resolvedAdbSerial: ""
+    property string adbProbeError: ""
 
     /** Android's user-set device name (Settings → About phone → Device name),
      *  read over ADB. KDE Connect reports the marketing model instead
@@ -260,10 +265,18 @@ Singleton {
                 activeIsWaydroid: KdeConnectService.activeIsWaydroid,
                 adbReachable: KdeConnectService.adbReachable,
                 resolvedAdbSerial: KdeConnectService.resolvedAdbSerial,
+                resolvedWirelessHost: KdeConnectService.resolvedWirelessHost,
+                reachableAddresses: dev ? dev.reachableAddresses : [],
+                adbProbeRunning: adbProbeProc.running,
+                adbProbeError: KdeConnectService.adbProbeError,
                 activeBattery: dev ? dev.charge : -1,
                 notificationsCount: KdeConnectService.notificationCount,
                 monitorRunning: monitorProc.running,
             })
+        }
+
+        function probeAdb(): void {
+            KdeConnectService._probeAdb()
         }
 
         function ping(devId: string): void {
@@ -1134,6 +1147,9 @@ Singleton {
     Process {
         id: adbProbeProc
         running: false
+        stderr: StdioCollector {
+            onStreamFinished: root.adbProbeError = this.text.trim().slice(0, 500)
+        }
         command: {
             const c = (Config.options.phone && Config.options.phone.scrcpy) ? Config.options.phone.scrcpy : null
             const useWl = root.activeIsWaydroid || (c && c.useWireless)
@@ -1230,6 +1246,7 @@ Singleton {
     property bool _adbProbeRestarting: false
 
     function _probeAdb() {
+        root.adbProbeError = ""
         root._adbProbeRestarting = true
         adbProbeProc.running = false
         root._adbProbeRestarting = false
@@ -1996,8 +2013,10 @@ Singleton {
         if (c?.useWireless) {
             const host = root._resolveWirelessHost(root.activeDeviceId)
             if (host) return ["-s", host]
-            const ip = (c.wirelessIp || "").trim()
-            if (ip) return ["-s", ip.includes(":") ? ip : ip + ":" + (c.wirelessPort || "5555")]
+            if (!c.autoWirelessIp) {
+                const ip = (c.wirelessIp || "").trim()
+                if (ip) return ["-s", ip.includes(":") ? ip : ip + ":" + (c.wirelessPort || "5555")]
+            }
         }
         return ["-s", "unavailable-" + root.activeDeviceId]
     }
