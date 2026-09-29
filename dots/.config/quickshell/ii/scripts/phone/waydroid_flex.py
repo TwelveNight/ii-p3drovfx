@@ -38,13 +38,15 @@ def start_session():
     fail("Waydroid session did not start; see " + str(log))
 
 
-def open_and_address():
-    # Keeping the native surface open prevents Waydroid from suspending its
-    # container while scrcpy's virtual display is active.
-    ui = run(["waydroid", "show-full-ui"], timeout=20)
-    if ui.returncode:
-        fail("Could not open Waydroid: " + (ui.stderr.strip() or ui.stdout.strip()))
-
+def wake_and_address():
+    # Closing Waydroid's native window freezes the container, but does not
+    # stop its session. Wake it directly so scrcpy needs no native window.
+    current = status()
+    if "Container:\tFROZEN" in current:
+        wake = run(["busctl", "--system", "call", "id.waydro.Container",
+                    "/ContainerManager", "id.waydro.ContainerManager", "Unfreeze"])
+        if wake.returncode:
+            fail("Could not wake Waydroid: " + (wake.stderr.strip() or wake.stdout.strip()))
     for _ in range(20):
         current = status()
         if "Container:\tRUNNING" in current:
@@ -124,7 +126,7 @@ def main():
 
     if "Session:\tRUNNING" not in status():
         start_session()
-    serial = open_and_address()
+    serial = wake_and_address()
     connected, unreachable = connect_adb(serial)
     if not connected and unreachable:
         print("WAYDROID_FLEX_RECOVERING_NETWORK", flush=True)
@@ -132,7 +134,7 @@ def main():
         if stopped.returncode:
             fail("Could not restart Waydroid after a network failure")
         start_session()
-        serial = open_and_address()
+        serial = wake_and_address()
         connected, _ = connect_adb(serial)
     if not connected:
         fail("Waydroid ADB did not become available")
