@@ -347,6 +347,34 @@ ContentPage {
             buttonRadius: Appearance.rounding.normal
             colBackground: Appearance.colors.colSecondaryContainer
             colBackgroundHover: Appearance.colors.colSecondaryContainerHover
+            contentItem: StyledText {
+                anchors.centerIn: parent
+                text: Translation.tr("Start Waydroid container")
+                color: Appearance.colors.colOnSecondaryContainer
+            }
+            onClicked: Quickshell.execDetached(["bash", Quickshell.shellPath("scripts/phone/waydroid_power.sh"), "start"])
+        }
+
+        RippleButton {
+            Layout.fillWidth: true
+            Layout.preferredHeight: 40
+            buttonRadius: Appearance.rounding.normal
+            colBackground: Appearance.colors.colSecondaryContainer
+            colBackgroundHover: Appearance.colors.colSecondaryContainerHover
+            contentItem: StyledText {
+                anchors.centerIn: parent
+                text: Translation.tr("Power off Waydroid service")
+                color: Appearance.colors.colOnSecondaryContainer
+            }
+            onClicked: Quickshell.execDetached(["bash", Quickshell.shellPath("scripts/phone/waydroid_power.sh"), "stop"])
+        }
+
+        RippleButton {
+            Layout.fillWidth: true
+            Layout.preferredHeight: 40
+            buttonRadius: Appearance.rounding.normal
+            colBackground: Appearance.colors.colSecondaryContainer
+            colBackgroundHover: Appearance.colors.colSecondaryContainerHover
             enabled: KdeConnectService.waydroidDevice !== null
             contentItem: StyledText {
                 anchors.centerIn: parent

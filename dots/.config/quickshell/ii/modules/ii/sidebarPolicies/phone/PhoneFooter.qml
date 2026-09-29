@@ -416,8 +416,10 @@ Rectangle {
                   run: () => root.requestOpenSubPage(Qt.resolvedUrl("PhoneKeyboardPage.qml")) },
                 { icon: "screenshot_monitor", label: Translation.tr("Screenshot"),
                   run: () => KdeConnectService.adbScreenshot() },
-                { icon: "power_settings_new", label: Translation.tr("Power"),
-                  run: () => KdeConnectService.adbTogglePower() }
+                { icon: "power_settings_new", label: KdeConnectService.activeIsWaydroid ? Translation.tr("Power off Waydroid service") : Translation.tr("Power"),
+                  run: () => KdeConnectService.activeIsWaydroid
+                      ? Quickshell.execDetached(["bash", Quickshell.shellPath("scripts/phone/waydroid_power.sh"), "stop"])
+                      : KdeConnectService.adbTogglePower() }
             ])
         }
     }
