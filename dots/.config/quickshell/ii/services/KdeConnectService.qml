@@ -1181,8 +1181,14 @@ Singleton {
                 ? "SERIAL=" + wantedSerial + "; "
                 : "SERIAL=$(adb devices | awk '$2==\"device\" && index($1, \":\")==0 {print $1; exit}'); "
                     + "if [ -z \"$SERIAL\" ]; then SERIAL=" + wantedSerial + "; fi; "
+            const wakeWaydroid = root._wakeWaydroidForProbe
+                ? "if waydroid status 2>/dev/null | grep -q 'Container:[[:space:]]*FROZEN'; then "
+                    + "busctl --system call id.waydro.Container /ContainerManager "
+                    + "id.waydro.ContainerManager Unfreeze >/dev/null 2>&1; fi; "
+                : ""
             return ["bash", "-c",
                 "if ! command -v adb >/dev/null 2>&1; then exit 1; fi; " +
+                wakeWaydroid +
                 resolveIp +
                 "if [ -n \"$IP\" ]; then " +
                 "  BASE=${IP%:*}; " +
@@ -1244,11 +1250,13 @@ Singleton {
      *  there, and acting on that would flush pending withAdbTarget callbacks
      *  with the state we are about to refresh. */
     property bool _adbProbeRestarting: false
+    property bool _wakeWaydroidForProbe: false
 
-    function _probeAdb() {
+    function _probeAdb(wakeWaydroid = false) {
         root.adbProbeError = ""
         root._adbProbeRestarting = true
         adbProbeProc.running = false
+        root._wakeWaydroidForProbe = wakeWaydroid && root.activeIsWaydroid
         root._adbProbeRestarting = false
         adbProbeProc.running = true
     }
@@ -1298,7 +1306,7 @@ Singleton {
         if (root._adbTargetResolving) return
         root._adbTargetResolving = true
         adbTargetWatchdog.restart()
-        root._probeAdb()
+        root._probeAdb(true)
     }
 
     // adb and avahi-browse can both block; never leave a caller waiting on a
