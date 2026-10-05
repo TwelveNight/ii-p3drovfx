@@ -9,11 +9,11 @@ hl.device({
     output = "eDP-1"
 })
 
--- Replace the default four-finger swipe-down Quickshell overview gesture
--- with the same maximize toggle dispatcher as SUPER+O.
+-- Four-finger swipes are owned by the upstream window-move gesture.
+-- Five-finger down toggles search; five-finger up toggles maximization.
 hl.gesture({
-    fingers = 4,
-    direction = "up",
+    fingers = 5,
+    direction = "down",
     action = function()
         -- A gesture has no key-release phase, so use the Quickshell IPC
         -- toggle directly instead of the Super release-sensitive shortcut.
@@ -21,10 +21,9 @@ hl.gesture({
     end
 })
 
--- Keep the original four-finger swipe-down maximize toggle.
 hl.gesture({
-    fingers = 4,
-    direction = "down",
+    fingers = 5,
+    direction = "up",
     action = function()
         hl.dispatch(hl.dsp.window.fullscreen({mode = "maximized", action = "toggle"}))
     end
