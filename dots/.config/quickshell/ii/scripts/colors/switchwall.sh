@@ -929,6 +929,11 @@ done"
                 rm -f -- "$theme_colors_file"
                 return 1
             fi
+            color_overrides="$(get_color_overrides "$mode_flag")"
+            if [[ -n "$color_overrides" ]] && ! run_color_overrides patch-flat "$theme_colors_file" --mode "$mode_flag" --overrides "$color_overrides"; then
+                rm -f -- "$theme_colors_file"
+                return 1
+            fi
             if cmp -s -- "$theme_colors_file" "$STATE_DIR/user/generated/colors.json"; then
                 rm -f -- "$theme_colors_file"
             else
@@ -936,7 +941,6 @@ done"
             fi
         fi
         rm -f "$STATE_DIR/matugen_error_notified"
-        apply_color_overrides_flat "$mode_flag"
         echo "[switchwall.sh] Applied theme: $type_flag"
         if [[ -z "$colors_only_flag" && "$(jq -r '.appearance.icons.enableThemed' "$SHELL_CONFIG_FILE" 2>/dev/null)" == "true" ]]; then python3 "$HOME/.config/quickshell/ii/scripts/colors/recolor_icons.py"; fi
         "$SCRIPT_DIR"/applycolor.sh

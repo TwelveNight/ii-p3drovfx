@@ -217,19 +217,27 @@ Singleton {
     }
 
     // presets.sh replaces config.json and Config reloads it asynchronously.
-    // Waiting a short, fixed debounce lets the heavy renderer/colour work start
-    // after the reload burst, rather than competing with the transition frame.
+    // Debounce the reload and wait for the staged config to land before
+    // selecting the wallpaper the new preset asks for.
     Timer {
         id: presetWallpaperApply
         interval: 220
         repeat: false
-        onTriggered: Wallpapers.applyConfiguredDesktopWallpaper()
+        onTriggered: {
+            if (GlobalStates.presetWorkDeferred || Config.applyingExternal) {
+                restart();
+                return;
+            }
+            Wallpapers.applyConfiguredDesktopWallpaper();
+        }
     }
 
     // The apply script has written config.json; start waiting for its work.
     Connections {
         target: PresetStore
         function onApplyFinished(name, ok) {
+            if (ok)
+                presetWallpaperApply.restart();
             if (!root.active) {
                 // Reduced motion: nothing is animating, theme right away.
                 root._markSettled();
@@ -240,7 +248,6 @@ Singleton {
                 root._finish();
                 return;
             }
-            presetWallpaperApply.restart();
             if (root.phase !== "colors")
                 return;
             root._appliedAt = Date.now();
