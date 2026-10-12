@@ -184,4 +184,9 @@ else
   apply_term &
 fi
 
+# NyxMellow templates are rendered by Matugen before this app-apply stage.
+# Reload only the running Classic UI addon; never restart or activate Fcitx.
+busctl --user --auto-start=no call org.fcitx.Fcitx5 /controller \
+    org.fcitx.Fcitx.Controller1 ReloadAddonConfig s classicui >/dev/null 2>&1 || true
+
 # apply_qt & # Qt theming is already handled by kde-material-colors

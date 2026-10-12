@@ -62,3 +62,15 @@ output_path = '~/.config/Kvantum/MaterialYouExpressive/MaterialYouExpressive.svg
 [templates.kvantum_kvconfig]
 input_path = '~/.config/matugen/templates/kvantum/MaterialYouExpressive.kvconfig'
 output_path = '~/.config/Kvantum/MaterialYouExpressive/MaterialYouExpressive.kvconfig'
+
+[templates.fcitx5_0]
+input_path = '~/.config/matugen/templates/fcitx5/panel.svg'
+output_path = '~/.local/share/fcitx5/themes/nyxmellow/panel.svg'
+
+[templates.fcitx5_1]
+input_path = '~/.config/matugen/templates/fcitx5/highlight.svg'
+output_path = '~/.local/share/fcitx5/themes/nyxmellow/highlight.svg'
+
+[templates.fcitx5_2]
+input_path = '~/.config/matugen/templates/fcitx5/theme.conf'
+output_path = '~/.local/share/fcitx5/themes/nyxmellow/theme.conf'
