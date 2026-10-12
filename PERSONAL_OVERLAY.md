@@ -16,3 +16,17 @@ integrate upstream changes by intent. Keep the upstream window switcher.
 
 The overlay is not installed directly by this branch; deploy it through the personal
 chezmoi repository after reviewing the diff.
+
+## Quickshell installer ownership
+
+Both the legacy `./setup install-files --core` path and the experimental file
+installer sync only `~/.config/quickshell/ii`. Their `rsync --delete` removes
+obsolete II files while preserving sibling shells such as `inir`, along with
+shared parent files. Keep this boundary when merging upstream installer changes.
+The `setup-ii-p3drovfx.sh` wrapper already deploys to the II subdirectory.
+
+Regression check (requires Python 3, Bash, rsync, yq and envsubst):
+
+```sh
+python3 scripts/test-quickshell-install-boundary.py
+```
