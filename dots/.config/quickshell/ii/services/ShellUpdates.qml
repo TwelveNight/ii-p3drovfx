@@ -22,6 +22,7 @@ Singleton {
 
     property string activeRemote: ""
     property string activeBranch: "main"
+    readonly property bool personalOverlay: activeBranch === "night/personal-overlay"
     property string activeFork: "p3drovfx"
     property string activeCommit: ""
     property string remoteCommit: ""
@@ -288,9 +289,24 @@ Singleton {
 
     Process {
         id: remoteHeadProc
-        command: ["bash", "-c", 'git ls-remote --heads "$1" "$2" 2>/dev/null | awk \'{print $1; exit}\'', "ii-remote-head", root.activeRemote, root.activeBranch]
+        command: root.personalOverlay
+            ? [FileUtils.trimFileProtocol(Directories.home + "/.local/bin/desktop-update"), "check", "hyprland-ii", "--json"]
+            : ["bash", "-c", 'git ls-remote --heads "$1" "$2" 2>/dev/null | awk \'{print $1; exit}\'', "ii-remote-head", root.activeRemote, root.activeBranch]
         stdout: StdioCollector {
             onStreamFinished: {
+                if (root.personalOverlay) {
+                    // Personal commits need not exist on GitHub; compare the
+                    // local overlay against fetched origin/dev, not its own name.
+                    let report = {};
+                    try { report = JSON.parse(text); } catch (_) {}
+                    root.commitsBehind = Number(report.behind || 0);
+                    root.remoteCommit = report.status === "current" ? root.activeCommit
+                        : report.status === "behind" ? report.remote_commit : "";
+                    root.commits = [];
+                    root.probed = true;
+                    root._finishCheck();
+                    return;
+                }
                 // An unreachable remote prints nothing; keeping the last known
                 // SHA would claim an update that was never confirmed.
                 root.remoteCommit = text.trim();
