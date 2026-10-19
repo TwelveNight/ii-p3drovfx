@@ -373,9 +373,22 @@ function backup_clashing_targets(){
   done
   clash_list=("${clash_list[@]}")
 
+  # The managed hypr entry is a login selector. Snapshot the installed
+  # configuration, without dereferencing unrelated application links.
+  local profile_hypr=""
+  if [[ "$target_dir" == "${XDG_CONFIG_HOME:-$HOME/.config}" && -L "$target_dir/hypr" && -f "$target_dir/desktop-profiles/profiles.json" ]]; then
+    for i in "${clash_list[@]}"; do
+      [[ "$i" == hypr ]] || continue
+      "$HOME/.local/bin/desktop-profile" guard hyprland-ii || return
+      profile_hypr="$(realpath -e -- "$target_dir/hypr")" || return
+    done
+  fi
+
   # Construct args_includes for rsync
   local args_includes=()
   for i in "${clash_list[@]}"; do
+    [[ "$i" != hypr || -z "$profile_hypr" ]] || continue
+    args_includes+=(--include="/$i")
     if [[ -d "$target_dir/$i" ]]; then
       args_includes+=(--include="/$i/")
       args_includes+=(--include="/$i/**")
@@ -385,8 +398,13 @@ function backup_clashing_targets(){
   done
   args_includes+=(--exclude='*')
 
-  x mkdir -p $backup_dir
-  x rsync -av --progress "${args_includes[@]}" "$target_dir/" "$backup_dir/"
+  x mkdir -p "$backup_dir" || return
+  x rsync -av --progress "${args_includes[@]}" "$target_dir/" "$backup_dir/" || return
+  if [[ -n "$profile_hypr" ]]; then
+    [[ ! -L "$backup_dir/hypr" ]] || { echo "Refusing symlink backup destination" >&2; return 1; }
+    x mkdir -p "$backup_dir/hypr" || return
+    x cp -a "$profile_hypr/." "$backup_dir/hypr/" || return
+  fi
 }
 
 function install_cmds(){

@@ -1,4 +1,15 @@
 #!/usr/bin/env bash
+
+# Login owns the canonical compositor link. Never update a different profile.
+profile_manager="${HOME}/.local/bin/desktop-profile"
+if [[ -f "${XDG_CONFIG_HOME:-$HOME/.config}/desktop-profiles/profiles.json" ]]; then
+    [[ -x "$profile_manager" ]] || { echo 'Missing desktop-profile manager' >&2; exit 1; }
+    case "${1:-}" in
+        -h|--help|help|status|version|info|doctor|checkdeps) ;;
+        *) "$profile_manager" guard hyprland-ii || exit $? ;;
+    esac
+fi
+
 cd "$(dirname "$0")" || { echo "Cannot cd to the script directory." >&2; exit 1; }
 # Use REPO_ROOT instead of base - when scripts are sourced they do not need export to inherit vars
 # shellcheck disable=SC2034  # consumed by the sourced sdata/* scripts

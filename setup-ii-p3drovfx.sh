@@ -1,4 +1,15 @@
 #!/usr/bin/env bash
+
+# Login owns the canonical compositor link. Never update a different profile.
+profile_manager="${HOME}/.local/bin/desktop-profile"
+if [[ -f "${XDG_CONFIG_HOME:-$HOME/.config}/desktop-profiles/profiles.json" ]]; then
+    [[ -x "$profile_manager" ]] || { echo 'Missing desktop-profile manager' >&2; exit 1; }
+    case "${1:-}" in
+        -h|--help|help|status|version|info|doctor|checkdeps) ;;
+        *) "$profile_manager" guard hyprland-ii || exit $? ;;
+    esac
+fi
+
 #
 # setup-ii-p3drovfx.sh — installer, updater and fork/branch manager for the
 # ii-p3drovfx Quickshell configuration.
@@ -2477,6 +2488,10 @@ remove_cli() {
 # caller's return value.
 backup_hyprland_config() {
     local dest="$XDG_CONFIG_HOME/hypr"
+    if [[ -L "$dest" && -f "$XDG_CONFIG_HOME/desktop-profiles/profiles.json" ]]; then
+        "$HOME/.local/bin/desktop-profile" guard hyprland-ii || return
+        dest="$(realpath -e -- "$dest")" || return
+    fi
     [[ -d "$dest" ]] || return 0
     [[ "$OPT_BACKUP" == true ]] || return 0
 
@@ -2516,6 +2531,10 @@ backup_hyprland_config() {
 install_hypr_config() {
     local repo_root="${1:-}"
     local dest="$XDG_CONFIG_HOME/hypr"
+    if [[ -L "$dest" && -f "$XDG_CONFIG_HOME/desktop-profiles/profiles.json" ]]; then
+        "$HOME/.local/bin/desktop-profile" guard hyprland-ii || return
+        dest="$(realpath -e -- "$dest")" || return
+    fi
 
     [[ "$OPT_HYPR" == false ]] && return 0
 
