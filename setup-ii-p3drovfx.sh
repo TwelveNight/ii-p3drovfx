@@ -1,5 +1,18 @@
 #!/usr/bin/env bash
 
+# Personal source integration is independent of the active compositor.
+if [[ "${1:-}" == update && "${DESKTOP_UPDATE_LOCAL:-}" != 1 && -f "$HOME/.config/desktop-profiles/profiles.json" ]]; then
+    local_update=false
+    for argument in "$@"; do [[ "$argument" != --local ]] || local_update=true; done
+    if [[ "$local_update" != true ]]; then
+        case "${2:-}" in
+            ''|-y|--yes) exec "$HOME/.local/bin/desktop-update" update hyprland-ii ;;
+            --no-deploy) exec "$HOME/.local/bin/desktop-update" sync hyprland-ii ;;
+            *) echo 'Use desktop-update update hyprland-ii, or pass --local explicitly.' >&2; exit 2 ;;
+        esac
+    fi
+fi
+
 # Login owns the canonical compositor link. Never update a different profile.
 profile_manager="${HOME}/.local/bin/desktop-profile"
 if [[ -f "${XDG_CONFIG_HOME:-$HOME/.config}/desktop-profiles/profiles.json" ]]; then
@@ -2354,11 +2367,17 @@ sync_branch_user_services() {
     local user_bus="${DBUS_SESSION_BUS_ADDRESS:-unix:path=$user_runtime/bus}"
     mkdir -p "$user_unit_dir"
     install -m 0644 "$skwd_unit" "$user_unit_dir/ii-skwd-wall-theme.service"
+    # Deployment must not start the II palette writer in another desktop.
+    local desktop_name="${XDG_CURRENT_DESKTOP:-}"
+    local -a activation=(enable)
+    if [[ "${desktop_name,,}" == *hyprland* && "${DESKTOP_UPDATE_LOCAL:-}" != 1 ]]; then
+        activation+=(--now)
+    fi
     if env XDG_RUNTIME_DIR="$user_runtime" DBUS_SESSION_BUS_ADDRESS="$user_bus" \
             systemctl --user daemon-reload >>"$LOG_FILE" 2>&1 &&
         env XDG_RUNTIME_DIR="$user_runtime" DBUS_SESSION_BUS_ADDRESS="$user_bus" \
-            systemctl --user enable --now ii-skwd-wall-theme.service >>"$LOG_FILE" 2>&1; then
-        ui_ok "Started" "skwd-wall theme bridge"
+            systemctl --user "${activation[@]}" ii-skwd-wall-theme.service >>"$LOG_FILE" 2>&1; then
+        ui_ok "Configured" "skwd-wall theme bridge (session owns activation)"
     else
         ui_warn "Could not start ii-skwd-wall-theme.service — run systemctl --user enable --now ii-skwd-wall-theme.service."
     fi

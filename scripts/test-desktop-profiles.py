@@ -40,6 +40,14 @@ class DesktopProfileTests(unittest.TestCase):
     def bash(self, code):
         return subprocess.run(['bash', '-euc', code], env=self.env, capture_output=True, text=True, cwd=self.home)
 
+    def test_plain_update_uses_the_shared_personal_pipeline(self):
+        helper = self.home / ".local/bin/desktop-update"
+        helper.write_text('#!/bin/sh\nprintf "%s\\n" "$*"\n')
+        helper.chmod(0o755)
+        result = subprocess.run(['bash', str(ROOT / 'setup-ii-p3drovfx.sh'), 'update'], env=self.env, capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout.strip(), 'update hyprland-ii')
+
     def legacy_backup(self):
         code = (ROOT / 'sdata/lib/functions.sh').read_text()
         return code[code.index('function backup_clashing_targets(){'):code.index('function install_cmds(){')]

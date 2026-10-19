@@ -12,3 +12,13 @@ Hyprland + II 的配置实体位于 `~/.config/desktop-profiles/hyprland-ii/hypr
 现代 CLI 与旧入口都在写入前检查 hyprland-ii 的归属；更新时保留
 custom/ 个人目录，Niri 的两个 profile 和共享远程桌面控制器不参与同步。
 隔离回归使用 `python3 scripts/test-desktop-profiles.py`。
+
+## 上游与 live 更新
+
+普通 `ii-p3drovfx update` 进入 `desktop-update update hyprland-ii`，
+使用 registry 指定的个人源码与 origin/dev，不猜测 origin/night/personal-overlay。
+`desktop-update sync all` 先合并并验证三套源码，不更新 live；
+`desktop-update deploy all` 再验证、备份、部署。个人提交不 rebase/reset/push。
+显式 --local 仍只部署本地源码。完整流程见 iNiR 的
+scripts/personal/DESKTOP-UPDATES.md。
+维护时只安装配色服务定义，由登录会话负责激活，避免干扰其它桌面。
