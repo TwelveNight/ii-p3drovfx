@@ -47,6 +47,10 @@ class DesktopProfileTests(unittest.TestCase):
         result = subprocess.run(['bash', str(ROOT / 'setup-ii-p3drovfx.sh'), 'update'], env=self.env, capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(result.stdout.strip(), 'update hyprland-ii')
+        result = subprocess.run(['bash', str(ROOT / 'setup-ii-p3drovfx.sh'), 'update', '--keep-config', '--no-hypr'], env=self.env, capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout.strip(), 'update hyprland-ii --no-hypr')
+
 
     def legacy_backup(self):
         code = (ROOT / 'sdata/lib/functions.sh').read_text()

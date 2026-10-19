@@ -5,11 +5,17 @@ if [[ "${1:-}" == update && "${DESKTOP_UPDATE_LOCAL:-}" != 1 && -f "$HOME/.confi
     local_update=false
     for argument in "$@"; do [[ "$argument" != --local ]] || local_update=true; done
     if [[ "$local_update" != true ]]; then
-        case "${2:-}" in
-            ''|-y|--yes) exec "$HOME/.local/bin/desktop-update" update hyprland-ii ;;
-            --no-deploy) exec "$HOME/.local/bin/desktop-update" sync hyprland-ii ;;
-            *) echo 'Use desktop-update update hyprland-ii, or pass --local explicitly.' >&2; exit 2 ;;
-        esac
+        action=update
+        pipeline_options=()
+        for argument in "${@:2}"; do
+            case "$argument" in
+                --keep-config|--hypr|-y|--yes) ;;
+                --no-hypr|--no-restart) pipeline_options+=("$argument") ;;
+                --no-deploy) action=sync ;;
+                *) echo 'Use desktop-update update hyprland-ii, or pass --local explicitly.' >&2; exit 2 ;;
+            esac
+        done
+        exec "$HOME/.local/bin/desktop-update" "$action" hyprland-ii "${pipeline_options[@]}"
     fi
 fi
 
