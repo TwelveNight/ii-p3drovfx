@@ -30,3 +30,13 @@ Regression check (requires Python 3, Bash, rsync, yq and envsubst):
 ```sh
 python3 scripts/test-quickshell-install-boundary.py
 ```
+
+## Shared Hyprland personal behavior
+
+`~/.config/hypr-personal/` is owned by chezmoi and shared with SekaiPop and
+Vitreus (Hyprland only). `custom/shared.lua` provides this shell's overview
+fallback. Edit behavior at `chezmoi source-path ~/.config/hypr-personal`, apply
+that directory and reload Hyprland; do not copy shared implementations here.
+The II source and chezmoi personal adapters must be updated together.
+Settings -> Hyprland -> Layout -> Tiling engine still selects the layout;
+shared controls do not overwrite that choice.
