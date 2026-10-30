@@ -170,11 +170,23 @@ Singleton {
 
     property bool mediaControlsOpen: false
     property bool mediaControlsPinned: false
-    // Names of screens showing the Always On Display (the OLED saver). Independent
-    // per monitor: toggling one monitor doesn't affect the others. Read by the desktop
+    // Names of screens showing the Always On Display (the OLED saver). Read by the desktop
     // overlay (OledSaver) and, while locked, by LockSurface, BackgroundRoot and the
     // widgets window.
     property var oledSaverMonitors: []
+
+    function toggleOledSaver(): void {
+        if (!(Config.options?.oledSaver?.enable ?? true))
+            return;
+        const all = Quickshell.screens.map(s => s.name);
+        root.oledSaverMonitors = (root.oledSaverMonitors ?? []).length > 0 ? [] : all;
+    }
+
+    function closeOledSaver(): void {
+        root.oledSaverMonitors = [];
+    }
+    // The AOD draws one of its own clocks (AodClockFace) instead of the lock's widgets.
+    readonly property bool aodUsesClockFace: ["flip", "dial", "expressive", "dots", "analog", "info"].includes(Config.options?.oledSaver?.clockStyle ?? "widgets")
     // Anti burn-in pixel shift for Always On Display (OLED saver).
     // Shifts widgets every minute to a nearby position to prevent OLED burn-in.
     property real aodBurnInShiftX: 0
@@ -805,6 +817,16 @@ Singleton {
     // stage 7b; until then this only ever holds the desktop.
     property string editTab: EditModeLogic.desktopTab
     readonly property bool editLockPreview: root.editMode && root.editTab === EditModeLogic.lockscreenTab
+    // The AOD tab: the lock's layout again (the AOD keeps the lock's widgets where
+    // the lock keeps them), on black and in grey, or the AOD's own clock instead.
+    readonly property bool editAodPreview: root.editMode && root.editTab === EditModeLogic.aodTab
+    // Either face that places widgets where the lock does.
+    readonly property bool editLockLayout: root.editLockPreview || root.editAodPreview
+    property real editAodProgress: root.editAodPreview ? 1 : 0
+    Behavior on editAodProgress {
+        enabled: !Appearance.reducedMotion
+        animation: Appearance.animation.elementMove.numberAnimation.createObject(root)
+    }
     // The tab's own scalar, beside the boolean rather than instead of it.
     //
     // The Lockscreen tab is a FILTER on the same desktop, and flipping it used
@@ -823,7 +845,7 @@ Singleton {
     // "The lock's LOOK is on screen": the real lock session or the preview of
     // it. The one derivation the theme sites are meant to read, so the preview
     // can never show the lock's wallpaper under the desktop's palette.
-    readonly property bool lockLookActive: root.screenLocked || root.editLockPreview
+    readonly property bool lockLookActive: root.screenLocked || root.editLockLayout
 
     // The edge each dock occupies, published by the dock window itself
     // (screen name -> { side, thickness }). The dock is the one place that
@@ -998,6 +1020,8 @@ Singleton {
         // of them from the lock preview means the desktop.
         if (root.editLockPreview && section !== "widgets" && section !== "lock" && section !== "style" && section !== "wallpaper")
             root.editTab = EditModeLogic.desktopTab;
+        if (root.editAodPreview && section !== "widgets" && section !== "aod")
+            root.editTab = EditModeLogic.desktopTab;
         root.editDrawerOpen = true;
     }
 
@@ -1044,7 +1068,7 @@ Singleton {
             return;
         root._editReopenMonitor = monitorName;
         root._editReopenWallpaper = root.editDrawerOpen && root.editDrawerSection === "wallpaper"
-            && !root.editLockPreview;
+            && !root.editLockLayout;
         root._editReopenPage = root._editReopenWallpaper ? root.editDrawerPage : "";
         root.closeEditMode();
         editReopenTimer.restart();
@@ -1147,7 +1171,7 @@ Singleton {
                     monitors: [{
                         name: mon,
                         activeWorkspaceId: ws,
-                        index: Quickshell.screens.findIndex(s => s.name === mon)
+                        index: HyprlandData.workspaceMapIndex(mon)
                     }],
                     windowList: HyprlandData.windowList || [],
                     allMonitors: HyprlandData.monitors || [],
@@ -1263,12 +1287,19 @@ Singleton {
     // so Ctrl+Z takes that edit back instead of reverting under it.
     signal editHistoryWillReplay()
 
+    property int _editHistoryBatchDepth: 0
+
     function editHistoryBeginBatch() {
         if (root._editHistoryBatch === null)
             root._editHistoryBatch = [];
+        root._editHistoryBatchDepth++;
     }
 
     function editHistoryEndBatch() {
+        if (root._editHistoryBatchDepth > 0)
+            root._editHistoryBatchDepth--;
+        if (root._editHistoryBatchDepth > 0)
+            return;
         const entries = root._editHistoryBatch;
         root._editHistoryBatch = null;
         if (entries === null || entries.length === 0)
@@ -1945,7 +1976,7 @@ Singleton {
             monitors: [{
                 name: mon,
                 activeWorkspaceId: ws,
-                index: Quickshell.screens.findIndex(screen => screen.name === mon)
+                index: HyprlandData.workspaceMapIndex(mon)
             }],
             windowList: HyprlandData.windowList || [],
             allMonitors: HyprlandData.monitors || [],
@@ -2141,10 +2172,11 @@ Singleton {
 
     readonly property bool connectModeActive: ShellModePolicy.connectModeActive
 
-    // In Float mode (cornerStyle 1), sidebars remain as separate PanelWindows
+    // With a horizontal Float bar (cornerStyle 1), sidebars remain as separate PanelWindows
     // rather than being embedded in the TopLayer. Only search/OSD are integrated.
+    // A vertical Float bar embeds them as floating cards that fuse with the bar.
     readonly property bool connectSidebarsSeparate: {
-        return connectModeActive && Config.options.bar.cornerStyle === 1;
+        return connectModeActive && Config.options.bar.cornerStyle === 1 && !Config.options.bar.vertical;
     }
 
     readonly property bool searchCenterMode: {
@@ -3495,6 +3527,10 @@ Singleton {
         name: "workspaceNumber"
         description: "Hold to show workspace numbers, release to show icons"
         onPressed: {
+            // searchToggleRelease is a release bind and never sees this press, so
+            // re-arm it here: Super+V and friends clear the flag, and Hyprland skips
+            // the release that would have consumed it.
+            root.superReleaseMightTrigger = true;
             if (!PanelFamily.touchFirst)
                 root.superDown = true;
         }

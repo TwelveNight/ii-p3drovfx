@@ -57,7 +57,7 @@ AbstractWidget {
     property bool visibleWhenLocked: lockBehavior === "keep" || lockBehavior === "custom" || lockBehavior === "center" || lockBehavior === "lockOnly"
     // The lock layout: the real lock once its wallpaper has centred, or Edit
     // Mode's Lockscreen tab, which previews it without a lock session.
-    readonly property bool lockLayoutActive: GlobalStates.lockScreenCentered || GlobalStates.editLockPreview
+    readonly property bool lockLayoutActive: GlobalStates.lockScreenCentered || GlobalStates.editLockLayout
     property bool forceCenter: (lockLayoutActive || GlobalStates.workspaceRestoreInProgress) && lockBehavior === "center"
 
     function getCenteredWidgetsList() {
@@ -495,6 +495,9 @@ AbstractWidget {
     readonly property var _widgetSizeConsumers: ({
         "android_search_bar": true, "at_a_glance": true,
         "todo_focus": true, "todo_board": true, "todo_column": true, "timer_pomodoro": true, "timer_stopwatch": true, "timer_countdown": true, "translator_widget": true, "water_glass": true, "phone_key": true, "phone_deck": true, "phone_tower": true, "send_drop": true, "session_grid": true,
+        "wellbeing_screen_ring": true, "wellbeing_limits": true, "wellbeing_bedtime": true, "wellbeing_break": true, "wellbeing_day": true, "people_birthday": true, "people_birthdays": true, "people_holiday": true, "people_countdowns": true, "people_favorites": true, "home_devices": true,
+        "weather_pattern": true, "weather_silhouette": true, "weather_strip": true, "weather_dial": true, "weather_monolith": true, "weather_daylight": true, "weather_ranges": true, "weather_ribbon": true, "weather_collage": true,
+        "converter_2x1": true, "shelf_1x1": true, "shelf_2x1": true, "shelf_1x2": true, "favorites_1x1": true, "favorites_row": true, "search_pixel": true, "search_shortcuts": true,
         "calendar_date_banner": true, "calendar_date_shapes": true, "calendar_date_stack": true,
         "calendar_date_type": true,
         "calendar_month_tall": true, "calendar_week_agenda": true, "calendar_week_strip": true,
@@ -545,6 +548,8 @@ AbstractWidget {
     // Uniform by design: widgets are drawn for one aspect ratio, so the grip
     // carries a single factor and never stretches one axis on its own.
     property bool _resizeActive: false
+    property var _resizeGroup: []
+    property real _resizeFollowerStartScale: 1.0
     property real _resizeStartScale: 1 // factor, not percent
     property real _resizeStartDist: 1
     property bool _resizeUsesGlobal: false
@@ -624,6 +629,15 @@ AbstractWidget {
         _resizeGestureMoved = false;
         _resizeFreeStep = false;
         _resizePreviewScale = _resizeStartScale;
+        if (canvas && canvas.selectedWidgets && canvas.selectedWidgets.indexOf(root) !== -1) {
+            _resizeGroup = canvas.selectedWidgets.filter(w => w !== root && w.draggable);
+            for (let i = 0; i < _resizeGroup.length; i++) {
+                const follower = _resizeGroup[i];
+                follower._resizeFollowerStartScale = follower.committedScaleFactor ?? follower.scale;
+            }
+        } else {
+            _resizeGroup = [];
+        }
         isDraggingOrSettling = true;
         settleTimer.stop();
         staggerTimer.stop();
@@ -647,6 +661,13 @@ AbstractWidget {
         }
         dist = Math.max(1, dist);
         _resizePreviewScale = _quantiseScale(_resizeStartScale * (dist / _resizeStartDist));
+        if (_resizeGroup.length > 0 && _resizeStartScale > 0) {
+            const ratio = _resizePreviewScale / _resizeStartScale;
+            for (let i = 0; i < _resizeGroup.length; i++) {
+                const follower = _resizeGroup[i];
+                follower._liveScaleOverride = (follower._resizeFollowerStartScale ?? 1) * ratio;
+            }
+        }
         applyLiveResize();
     }
 
@@ -714,7 +735,18 @@ AbstractWidget {
     function resetScaleFromHandle() {
         _resizeActive = false;
         _resizePreviewScale = 0;
+        const canvas = findCanvas(root.parent);
+        const inGroup = canvas && canvas.selectedWidgets && canvas.selectedWidgets.indexOf(root) !== -1;
+        GlobalStates.editHistoryBeginBatch();
         commitResizeScale(1.0);
+        if (inGroup) {
+            const others = canvas.selectedWidgets.filter(w => w !== root && w.draggable);
+            for (let i = 0; i < others.length; i++) {
+                others[i].commitResizeScale(1.0);
+                others[i]._liveScaleOverride = 0;
+            }
+        }
+        GlobalStates.editHistoryEndBatch();
         // Cleared only after the commit, so the scale binding never falls back
         // to the stale pre-resize value for a frame.
         _liveScaleOverride = 0;
@@ -728,8 +760,24 @@ AbstractWidget {
         // A click without pointer travel never entered updateResizeGesture, so
         // there is nothing to commit — persisting the untouched preview would
         // just rewrite the same value and fight the double-click reset.
-        if (_resizeGestureMoved && _resizePreviewScale > 0)
+        if (_resizeGestureMoved && _resizePreviewScale > 0) {
+            GlobalStates.editHistoryBeginBatch();
             commitResizeScale(_resizePreviewScale);
+            if (_resizeGroup.length > 0 && _resizeStartScale > 0) {
+                const ratio = _resizePreviewScale / _resizeStartScale;
+                for (let i = 0; i < _resizeGroup.length; i++) {
+                    const follower = _resizeGroup[i];
+                    follower._liveScaleOverride = 0;
+                    follower.commitResizeScale((follower._resizeFollowerStartScale ?? 1) * ratio);
+                }
+            }
+            GlobalStates.editHistoryEndBatch();
+        } else if (_resizeGroup.length > 0) {
+            for (let i = 0; i < _resizeGroup.length; i++) {
+                _resizeGroup[i]._liveScaleOverride = 0;
+            }
+        }
+        _resizeGroup = [];
         _resizePreviewScale = 0;
         _liveScaleOverride = 0;
         settleTimer.restart();
@@ -873,7 +921,6 @@ AbstractWidget {
         enabled: !root.exiting && root.entryProgress >= 1
         animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
     }
-    readonly property real lockScaleFactor: lockBehavior === "center" ? 1.0 : (GlobalStates.lockAnimationActive ? 0.85 : 1.0)
     // No scale while dragging. A 3% lift used to be the only feedback that the
     // grab took, but it wrote `root.scale` on press and on release, which meant
     // a plain reposition also re-rasterised every Canvas behind `Supersampled`
@@ -881,7 +928,7 @@ AbstractWidget {
     // widget whose real size never changed. The grab is reported by the snap
     // guides and the selection halo instead, neither of which moves the widget.
     scale: _effectiveInstanceScale * (Config.options.background.widgets.widgetsScale ?? 1.0)
-        * lockScaleFactor * lifecycleScale
+        * lifecycleScale
     Behavior on scale {
         // Same as the opacity above: `elementResize` is 300ms and the reap is
         // at 260ms, so left armed this Behavior turns the exit's shrink into a
@@ -1308,6 +1355,12 @@ AbstractWidget {
             root.x = _dragOriginX;
             root.y = _dragOriginY;
         }
+        if (_resizeGroup.length > 0) {
+            for (let i = 0; i < _resizeGroup.length; i++) {
+                _resizeGroup[i]._liveScaleOverride = 0;
+            }
+            _resizeGroup = [];
+        }
         _pointerGestureReady = false;
         _dragMovementActive = false;
         isDraggingOrSettling = false;
@@ -1401,6 +1454,8 @@ AbstractWidget {
         const canvas = findCanvas(root.parent);
         if (!canvas || !canvas.contextMenuRequested)
             return;
+        if (canvas.selectedWidgets && canvas.selectedWidgets.indexOf(root) === -1)
+            canvas.applySelection([root]);
         const point = root.mapToItem(canvas, localX, localY);
         canvas.contextMenuRequested(widgetInstance.id, point.x, point.y);
     }

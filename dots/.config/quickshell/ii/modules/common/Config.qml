@@ -1110,7 +1110,7 @@ Singleton {
     //
     // Bump `currentConfigVersion` and add a matching block to `migrateRaw()`
     // whenever an existing key changes type or meaning.
-    readonly property int currentConfigVersion: 30
+    readonly property int currentConfigVersion: 31
     // Defaults have to be captured before the file lands, because deserializing
     // is what destroys them. FileView loads asynchronously, so at component
     // completion the adapter still holds nothing but the QML defaults.
@@ -1851,6 +1851,20 @@ Singleton {
                 }
                 console.log("[Config] Migrated workspace compactor keys into bar.workspaces.arranger");
             }
+        }
+
+        // v30 -> v31: the desktop icon menu's "Open in Zed" became the editor
+        // entry, which runs apps.editor; an arranged menu keeps it where it was.
+        if (from < 31 && Array.isArray(raw.contextMenu?.layouts)) {
+            for (const layout of raw.contextMenu.layouts) {
+                if (!layout || layout.menu !== "desktopItem")
+                    continue;
+                for (const key of ["order", "bar", "hidden"]) {
+                    if (Array.isArray(layout[key]))
+                        layout[key] = layout[key].map(id => id === "zed" ? "editor" : id);
+                }
+            }
+            console.log("[Config] Migrated desktop icon menu: zed -> editor");
         }
 
         raw.configVersion = root.currentConfigVersion;
@@ -3147,6 +3161,13 @@ Singleton {
                     property bool enableThemed: false
                     property bool enableShapeMask: false
                     property string shapeMask: "Circle"
+                    // ii-icon-pack, installed and reshaped from Settings -> Themed icons (services/IiIconPack.qml)
+                    property JsonObject iiPack: JsonObject {
+                        property string shape: "circle" // A key from the pack's `iipack.py shapes`
+                        property real plateScale: 1.0 // Icon size inside its canvas, 0.6-1.08
+                        property real glyphScale: 1.0 // Logo size on the plate, 0.5-1.5
+                        property string source: "" // Pack checkout; empty = ~/.local/share/ii-icon-pack
+                    }
                 }
                 property string borderColorType: "primary" // Options: primary, secondary, tertiary, primaryContainer, surface
                 property bool borderless: true
@@ -3208,6 +3229,7 @@ Singleton {
             property JsonObject apps: JsonObject {
                 property string bluetooth: "kcmshell6 kcm_bluetooth"
                 property string changePassword: "kitty -1 --hold=yes fish -i -c 'passwd'"
+                property string editor: "zeditor" // The desktop icon menu's "Open in", given the path
                 property string network: "kcmshell6 kcm_networkmanagement"
                 property string manageUser: "kcmshell6 kcm_users"
                 property string networkEthernet: "kcmshell6 kcm_networkmanagement"
@@ -3331,6 +3353,10 @@ Singleton {
                     property int gpuThreshold: 45
                     property int holdSec: 20
                     property list<string> extraClasses: []
+                    // Never a game, whatever else matches: window class
+                    // patterns, or a Steam app id ("558990") for Steam-launched
+                    // tools that are not games.
+                    property list<string> ignoreClasses: []
                 }
             }
 
@@ -4039,6 +4065,148 @@ Singleton {
                         property real y: 200
                         property bool expressiveColors: true
                     }
+                    property JsonObject weather_monolith: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 200
+                        property real y: 200
+                        property int widgetSize: 100
+                    }
+                    property JsonObject weather_daylight: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 200
+                        property real y: 200
+                        property int widgetSize: 100
+                    }
+                    property JsonObject weather_ranges: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 200
+                        property real y: 200
+                        property int widgetSize: 100
+                    }
+                    property JsonObject weather_ribbon: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 200
+                        property real y: 200
+                        property int widgetSize: 100
+                    }
+                    property JsonObject weather_collage: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 200
+                        property real y: 200
+                        property int widgetSize: 100
+                    }
+                    property JsonObject weather_pattern: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 200
+                        property real y: 200
+                        property int widgetSize: 100
+                    }
+                    property JsonObject weather_silhouette: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 200
+                        property real y: 200
+                        property int widgetSize: 100
+                    }
+                    property JsonObject weather_strip: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 200
+                        property real y: 200
+                        property int widgetSize: 100
+                    }
+                    property JsonObject weather_dial: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 200
+                        property real y: 200
+                        property int widgetSize: 100
+                    }
+                    property JsonObject wellbeing_screen_ring: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 200
+                        property real y: 200
+                        property int widgetSize: 100
+                    }
+                    property JsonObject wellbeing_limits: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 200
+                        property real y: 200
+                        property int widgetSize: 100
+                    }
+                    property JsonObject wellbeing_bedtime: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 200
+                        property real y: 200
+                        property int widgetSize: 100
+                    }
+                    property JsonObject wellbeing_break: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 200
+                        property real y: 200
+                        property int widgetSize: 100
+                        property int breakEveryMinutes: 50
+                    }
+                    property JsonObject wellbeing_day: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 200
+                        property real y: 200
+                        property int widgetSize: 100
+                    }
+                    property JsonObject people_birthday: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 200
+                        property real y: 200
+                        property int widgetSize: 100
+                    }
+                    property JsonObject people_birthdays: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 200
+                        property real y: 200
+                        property int widgetSize: 100
+                    }
+                    property JsonObject people_holiday: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 200
+                        property real y: 200
+                        property int widgetSize: 100
+                    }
+                    property JsonObject people_countdowns: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 200
+                        property real y: 200
+                        property int widgetSize: 100
+                        property list<var> events: []
+                    }
+                    property JsonObject people_favorites: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 200
+                        property real y: 200
+                        property int widgetSize: 100
+                    }
+                    property JsonObject home_devices: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 200
+                        property real y: 200
+                        property int widgetSize: 100
+                    }
                     property JsonObject weather_hourly: JsonObject {
                         property bool enable: false
                         property string placementStrategy: "free"
@@ -4465,6 +4633,79 @@ Singleton {
                         property string localsendIp: ""
                         property string localsendAlias: ""
                     }
+                    property JsonObject converter_2x1: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 400
+                        property real y: 120
+                        property int widgetSize: 100
+                        property string category: "length"
+                        property string from: "cm"
+                        property string to: "in"
+                        property real value: 1
+                    }
+                    property JsonObject shelf_1x1: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 400
+                        property real y: 120
+                        property int widgetSize: 100
+                    }
+                    property JsonObject shelf_2x1: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 400
+                        property real y: 120
+                        property int widgetSize: 100
+                    }
+                    property JsonObject shelf_1x2: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 400
+                        property real y: 120
+                        property int widgetSize: 100
+                    }
+                    property JsonObject favorites_1x1: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 400
+                        property real y: 120
+                        property int widgetSize: 100
+                        property bool showLabels: true
+                    }
+                    property JsonObject favorites_row: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 400
+                        property real y: 120
+                        property int widgetSize: 100
+                        property bool showLabels: true
+                    }
+                    property JsonObject search_pixel: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 400
+                        property real y: 120
+                        property int widgetSize: 100
+                        property string logo: "google" // google | distro | spark
+                        property string hint: ""
+                        property string action1: "lens"
+                        property string action2: "music_rec"
+                        property string action3: "ai_chat"
+                    }
+                    property JsonObject search_shortcuts: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 400
+                        property real y: 120
+                        property int widgetSize: 100
+                        property string hint: ""
+                        property string barAction: "ai_chat"
+                        property string shortcut1: "clipboard"
+                        property string shortcut2: "emojis"
+                        property string shortcut3: "files"
+                        property string shortcut4: "lens"
+                    }
                     property JsonObject session_grid: JsonObject {
                         property bool enable: false
                         property string placementStrategy: "free"
@@ -4498,6 +4739,9 @@ Singleton {
                 }
                 property list<var> activeWidgets: []
                 property bool scaleLargeWallpapers: false
+                // What a wallpaper framed as Centered (Edit Mode's wallpaper
+                // dock) leaves uncovered around the picture.
+                property string centeredBackground: "#000000"
                 property bool animateWallpaperChanges: true
                 property string wallpaperAnimation: ""
                 property bool zoomOutEnabled: true  // master toggle for zoom-out animations
@@ -4572,7 +4816,7 @@ Singleton {
                 // Per screen, written by Edit Mode's Wallpaper catalogue
                 // (services/WallpaperLayout.qml): a screen's own wallpaper and
                 // how it frames each picture it has shown.
-                //   [{ monitor, key, path, framings: [{ path, zoom, x, y, rotation, flipH, flipV }] }]
+                //   [{ monitor, key, path, framings: [{ path, zoom, x, y, rotation, flipH, flipV, centered }] }]
                 // `key` = the monitor's "model/serial" ("" when it cannot be
                 // told apart), so an entry follows the monitor across ports.
                 // `path` "" = the shared wallpaper above, which is also the
@@ -5834,6 +6078,17 @@ Singleton {
                 property bool autoOverflowGroup: true
                 property bool enableShapeMask: true
                 property string shapeMask: "Circle"
+                // Running mark beside each dock icon: "dot" is a circle, "pill" a
+                // bar along the icon's edge. One per window, and anything past
+                // runningIndicatorMaxVisible collapses to circles. Sizes are px
+                // on a 56 px dock, scaled by dock.height unless ScaleWithDock is off.
+                property string runningIndicatorStyle: "dot"
+                property int runningIndicatorLength: 10
+                property int runningIndicatorThickness: 3
+                property int runningIndicatorMaxVisible: 5
+                property bool runningIndicatorScaleWithDock: true
+                // The focused window's mark in colOnLayer0 instead of colPrimary.
+                property bool runningIndicatorNeutralColor: false
                 property real height: 56
                 property real hoverRegionHeight: 2
                 property bool pinnedOnStartup: false
@@ -6309,6 +6564,7 @@ Singleton {
                 property bool antiBurnIn: false // periodically shift widgets to prevent OLED burn-in
                 property int cursorHideDelay: 5 // seconds of no mouse movement before the cursor hides again
                 property int lockTimeout: 10 // minutes without input on the lock screen before it turns into the Always On Display; 0 = never
+                property string clockStyle: "widgets" // "widgets" (the lock's widgets in grey) | "flip" | "dial" | "expressive" | "dots" | "analog" | "info" (AodClockFace)
             }
 
             property JsonObject osd: JsonObject {
@@ -6693,10 +6949,6 @@ Singleton {
                     property string imageSource: "https://media.tenor.com/H5U5bJzj3oAAAAAi/kukuru.gif" //media.tenor.com/H5U5bJzj3oAAAAAi/kukuru.gif"
                     property real scale: 0.5
                 }
-                property JsonObject notes: JsonObject {
-                    property bool showTabs: true
-                    property bool allowEditingIcon: true
-                }
                 property JsonObject media: JsonObject {
                     property int backgroundOpacityPercentage: 100
                     property bool useGradientMask: true
@@ -6717,6 +6969,9 @@ Singleton {
                 }
                 // Performance HUD (RivaTuner style). Frame rate comes from MangoHud's logger.
                 property JsonObject perfMonitor: JsonObject {
+                    // Steam got its MangoHud wiring once, on first run; after that the
+                    // per-game switch in Settings decides.
+                    property bool gamesAutoWired: false
                     // Pin the HUD on screen while a game is detected
                     property bool autoPin: false
                     property string style: "bars" // bars | graph | text

@@ -16,7 +16,6 @@ import qs.modules.ii.dynamicIsland.core
 import qs.modules.ii.dynamicIsland.dashboard
 import qs.modules.ii.dynamicIsland.bubble
 import qs.modules.ii.overview
-import "../../../dock/utilities/UtilityFiles.js" as UtilityFiles
 
 /**
  * The notch: one surface hanging from the top edge, driven by the engine.
@@ -971,19 +970,20 @@ Scope {
         if (root.dashboardActive)
             return root.dashboardHeight;
         if (root.searchActive) {
-            const ovHeight = (notchContent.overviewTargetHeight > 0
+            const integratedOverviewVisible = root.integratedOverview && root.overviewVisible;
+            const ovHeight = (root.integratedOverview && notchContent.overviewTargetHeight > 0
                 ? notchContent.overviewTargetHeight + notchContent.overviewGap
                 : 0) + 54;
             // When query is empty and no panel is active, we are in (or returning to) overview: target is immediately the overview height.
-            // Only while the overview is actually shown: with it disabled the loader still reports a
-            // height, and the island opened as a tall empty box.
-            if (LauncherSearch.query === "" && !root.searchPanelOwned && root.overviewVisible)
+            // Only while the overview is actually shown inside the island: with it disabled or external
+            // the loader still reports a height, and the island opened as a tall empty box.
+            if (LauncherSearch.query === "" && !root.searchPanelOwned && integratedOverviewVisible)
                 return Math.min(root.heightCap, ovHeight);
 
             const wanted = notchContent.searchTargetHeight;
             const search = wanted > 0 ? wanted : 54;
             // While searching, hold at least ovHeight while overview is fading out so it doesn't dip
-            const holdingOverview = root.overviewVisible || root.overviewFade > 0.001;
+            const holdingOverview = root.integratedOverview && (root.overviewVisible || root.overviewFade > 0.001);
             return Math.min(root.heightCap, holdingOverview ? Math.max(search, ovHeight) : search);
         }
         if (root.wallpaperActive) {
@@ -2413,6 +2413,7 @@ Scope {
             readonly property bool returningToOverview: root.searchActive
                 && LauncherSearch.query === ""
                 && !root.searchPanelOwned
+                && root.integratedOverview
                 && root.overviewVisible
                 && container.animatedHeight > ((notchContent.overviewTargetHeight > 0 ? notchContent.overviewTargetHeight + notchContent.overviewGap : 0) + 54 + 10)
 
@@ -2611,9 +2612,7 @@ Scope {
                     source.dragOnRight = false;
 
                     if (targetCol === 1) {
-                        const rawUrls = drop.urls.map(url => url.toString());
-                        const currentShelf = Persistent.ready ? Array.from(Persistent.states.dockUtilities.shelf ?? []) : [];
-                        Persistent.states.dockUtilities.shelf = UtilityFiles.dedupe(currentShelf.concat(rawUrls));
+                        FileShelf.add(drop.urls.map(url => url.toString()));
                         source.dragHovering = false;
                         source.serviceChoice = 0;
                         drop.accept(Qt.CopyAction);
@@ -2747,8 +2746,8 @@ Scope {
                     // The workspace overview, drawn inside the body under the search
                     // field; see NotchContent.overviewVisible.
                     overviewVisible: root.integratedOverview && root.overviewVisible
-                    overviewBuilt: root.overviewBuilt && !root.scrollingLayout
-                    overviewFade: root.overviewFade
+                    overviewBuilt: root.overviewBuilt && !root.scrollingLayout && root.integratedOverview
+                    overviewFade: root.integratedOverview ? root.overviewFade : 0
                     overviewRows: root.overviewRows
                     overviewColumns: root.overviewColumns
                     overviewScale: root.overviewScale

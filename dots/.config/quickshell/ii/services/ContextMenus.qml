@@ -158,7 +158,7 @@ Singleton {
                 { "id": "reveal", "symbol": "folder_open", "title": "Show in folder" },
                 { "id": "terminal", "symbol": "terminal", "title": "Open terminal here" },
                 { "id": "claude", "symbol": "smart_toy", "title": "Claude Code here" },
-                { "id": "zed", "symbol": "code", "title": "Open in Zed" },
+                { "id": "editor", "symbol": "code", "title": "Open in editor" },
                 { "id": "copy", "symbol": "content_copy", "title": "Copy", "submenu": true, "bar": true },
                 { "id": "separator-2", "separator": true },
                 { "id": "section", "symbol": "dashboard", "title": "Section", "submenu": true },
@@ -175,6 +175,8 @@ Singleton {
             "icon": "apps",
             "description": "Right-click on an app in the dock",
             "entries": [
+                { "id": "appNotifications", "symbol": "notifications", "title": "Notifications", "block": true },
+                { "id": "separator-n", "separator": true },
                 { "id": "appActions", "symbol": "arrow_outward", "title": "App actions", "block": true },
                 { "id": "separator", "separator": true },
                 { "id": "launch", "symbol": "launch", "title": "Launch", "bar": true },

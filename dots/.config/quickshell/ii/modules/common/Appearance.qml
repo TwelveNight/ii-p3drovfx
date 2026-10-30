@@ -382,6 +382,11 @@ Singleton {
     }
 
     property real ignoreAlpha: Config.options.appearance.ignoreAlpha ?? 0.2
+    // Drop shadows (colShadow, the island's NotchShadow) reach ~0.3 alpha. A threshold
+    // below that blurs the shadow margin into a hard-edged frosted ring around every
+    // shadowed shell surface, so the layer rules never go under it - unless the panel
+    // itself is fainter than its shadow, where keeping the panel's blur wins.
+    readonly property real layerIgnoreAlpha: Math.max(root.ignoreAlpha, Math.min(0.31, Math.max(0, 1 - root.backgroundTransparency - 0.01)))
 
     // Hyprland ignores pixels with opacity <= ignore_alpha. The bar and both
     // Dynamic Island variants use colLayer0, whose opacity follows the
@@ -399,8 +404,10 @@ Singleton {
         : root.islandIgnoreAlpha
     // The island always paints colLayer0 (background transparency), whatever the
     // bar style: tying it to the transparent bar's pill opacity put the threshold
-    // above the island's own alpha and dropped its blur.
-    readonly property real islandIgnoreAlpha: Math.min(root.ignoreAlpha, Math.max(0, 1 - root.backgroundTransparency - 0.01))
+    // above the island's own alpha and dropped its blur. Held just under that alpha,
+    // as for the dock: any lower and the body's antialiased edge pixels blur too,
+    // a 1px ring of the bright backdrop around the island.
+    readonly property real islandIgnoreAlpha: Math.max(0, 1 - root.backgroundTransparency - 0.01)
 
     // The dock's tray is colLayer0 (background transparency): hold the threshold just
     // under it, as for the bar, or every antialiased edge of its widgets blurs too and
@@ -408,13 +415,16 @@ Singleton {
     // dock paints no tray at all - the band below already carries the blur - so only
     // opaque pixels pass. Set by the dock (Dock.qml), which knows when it is on the band.
     property bool dockOnFrameBand: false
-    readonly property real dockIgnoreAlpha: root.dockOnFrameBand ? 0.99 : Math.max(0, 1 - root.backgroundTransparency - 0.01)
+    // Dock popups (window preview) are blurred with the dock layer's ignore_alpha, so while
+    // one is open the band drops to the card's threshold instead of 0.99.
+    property int dockPopupsOpen: 0
+    readonly property real dockIgnoreAlpha: root.dockOnFrameBand && root.dockPopupsOpen <= 0 ? 0.99 : Math.max(0, 1 - root.backgroundTransparency - 0.01)
 
     // Popups only need compositor blur when transparency is enabled; for opaque popups,
     // compositor blur behind a 100% opaque surface is completely invisible and causes
     // Hyprland to blur the drop shadow pixels into a thick frosted halo when ignore_alpha is low.
     readonly property bool popupBlurEnabled: (Config.options?.appearance?.transparency?.enable ?? false) && (Config.options?.appearance?.transparency?.popups ?? false)
-    readonly property real popupIgnoreAlpha: Math.min(root.ignoreAlpha, Math.max(0, 1 - root.backgroundTransparency - 0.01))
+    readonly property real popupIgnoreAlpha: Math.min(root.layerIgnoreAlpha, Math.max(0, 1 - root.backgroundTransparency - 0.01))
 
     // Desktop widgets: compositor blur behind a see-through widget background.
     // Their background alpha (the scheme surface times the tint, set by
@@ -472,7 +482,7 @@ Singleton {
     }
 
     function getLayerRulesScript(): string {
-        var a = root.ignoreAlpha;
+        var a = root.layerIgnoreAlpha;
         var barA = root.barIgnoreAlpha;
         var script = "";
         // Named rules merge on re-declaration: dragging Ignore Alpha must update
@@ -491,6 +501,9 @@ Singleton {
         script += "hl.layer_rule({ name = 'ii:appearance:bar', match = { namespace = 'quickshell:bar' }, blur = true, xray = " + xray + ", ignore_alpha = " + barA + " }) ";
         script += "hl.layer_rule({ name = 'ii:appearance:dock', match = { namespace = 'quickshell:dock' }, blur = true, xray = " + xray + ", ignore_alpha = " + root.dockIgnoreAlpha + " }) ";
         script += "hl.layer_rule({ name = 'ii:appearance:island', match = { namespace = 'quickshell:floatingNotch' }, blur = true, xray = " + xray + ", ignore_alpha = " + root.islandIgnoreAlpha + " }) ";
+        // The sidebars' body is colLayer0 too: the island's threshold keeps their
+        // antialiased edges from blurring into a 1px ring.
+        script += "hl.layer_rule({ name = 'ii:appearance:sidebars', match = { namespace = '^quickshell:sidebar(Left|Right)$' }, blur = true, xray = " + xray + ", ignore_alpha = " + root.islandIgnoreAlpha + " }) ";
         script += "hl.layer_rule({ name = 'ii:appearance:background', match = { namespace = 'quickshell:background' }, blur = false }) ";
         // See backgroundWidgetsRules. Re-declared on every change; rules.lua keeps them off
         // until the shell has pushed these.
@@ -505,7 +518,10 @@ Singleton {
         script += "hl.layer_rule({ name = 'ii:appearance:task-view', match = { namespace = 'quickshell:wTaskView' }, blur = true, ignore_alpha = 0.0 }) ";
         script += "hl.layer_rule({ name = 'ii:appearance:overview-transition', match = { namespace = 'quickshell:overviewWindowTransition' }, blur = false }) ";
         script += "hl.layer_rule({ name = 'ii:appearance:workspace-overlay', match = { namespace = 'quickshell:workspaceBlurOverlay' }, blur = true, ignore_alpha = 0.0, order = -1, animation = 'fade' }) ";
-        script += "hl.layer_rule({ name = 'ii:appearance:notification-animation', match = { namespace = 'quickshell:notificationPopup' }, no_anim = true }) ";
+        // The popup slides in over the dock, bar, screen corners and every other shell
+        // surface. Hyprland draws lower orders on top, so -2 clears the default 0 those
+        // surfaces sit at (and the -1 overlays), while live draw keeps its -5 ink above all.
+        script += "hl.layer_rule({ name = 'ii:appearance:notification-animation', match = { namespace = 'quickshell:notificationPopup' }, no_anim = true, order = -2 }) ";
         // These layer surfaces animate their content with the Windows preset. Never also
         // animate the fullscreen transparent layer (or alter animations for other overlays).
         script += "hl.layer_rule({ name = 'ii:appearance:window-animation-overlays', match = { namespace = '^quickshell:(usage|modes|cheatsheet)$' }, no_anim = true }) ";

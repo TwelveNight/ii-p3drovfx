@@ -51,6 +51,7 @@ import qs.modules.ii.alarmRingingPopup
 import qs.modules.ii.reminderAlertPopup
 import qs.modules.ii.screenTimeOverlay
 import qs.modules.ii.bedtimeOverlay
+import qs.modules.ii.timerAlertPopup
 import qs.modules.ii.screenshotOverlay
 import qs.modules.ii.dynamicIsland
 import qs.modules.ii.dynamicIsland.core
@@ -212,6 +213,10 @@ Scope {
     UrlPanelLoader {
         panelUrl: Qt.resolvedUrl("../modules/ii/screenshotOverlay/ScreenshotOverlay.qml")
         extraCondition: GlobalStates.screenshotOverlayOpen
+    }
+    UrlPanelLoader {
+        panelUrl: Qt.resolvedUrl("../modules/ii/timerAlertPopup/TimerAlertPopup.qml")
+        extraCondition: TimerService.alert !== null
     }
     UrlPanelLoader {
         panelUrl: Qt.resolvedUrl("../modules/ii/tilingAssistant/TilingOverlay.qml")

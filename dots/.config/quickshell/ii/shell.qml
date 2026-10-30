@@ -68,6 +68,17 @@ ShellRoot {
         deferredServicesTimer.restart();
     }
 
+    // Keep upstream's Steam/MangoHud wiring behind the personal service queue.
+    Process {
+        id: perfAutoWire
+        command: ["python3", Quickshell.shellPath("scripts/perfOverlay/perf_monitor.py"), "autowire",
+            "--dir", String(Directories.cache).replace(/^file:\/\//, "") + "/perf-overlay/mangohud"]
+        onExited: exitCode => {
+            if (exitCode === 0)
+                Config.options.overlay.perfMonitor.gamesAutoWired = true;
+        }
+    }
+
     Timer {
         id: deferredServicesTimer
         interval: 7000
@@ -86,6 +97,7 @@ ShellRoot {
         const hasCalendarSubscriptions = (timetable?.imports?.enable ?? false)
             || ((timetable?.subscriptions ?? []).length > 0);
         deferredServiceSteps = [
+            () => { if (!Config.options.overlay.perfMonitor.gamesAutoWired) perfAutoWire.running = true; },
             () => Hyprsunset.load(),
             () => DisplayColorFilter.load(),
             () => Cliphist.refresh(),
@@ -122,6 +134,7 @@ ShellRoot {
             () => { if (Config.options?.interactions?.touchGestures?.enable ?? true) TouchGestureService.enabled; },
             () => { TouchpadGestures.enabled; },
             () => { if (Config.options?.bar?.workspaces?.arranger?.autoCloseGaps ?? false) WorkspaceArranger.enabled; },
+            () => { IiIconPack.busy; },
             () => { if (Config.options?.dictation?.enabled) DictationService.installed; },
             () => { if (Config.options?.budsLink?.enabled) BudsLinkService.serviceAvailable; },
             () => { if (Config.options?.policies?.phone !== 0) KdeConnectService.available; },
