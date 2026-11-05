@@ -25,7 +25,9 @@ hl.on("hyprland.start", function()
 
     -- Core components (authentication, lock screen, notification daemon)
     hl.exec_cmd("gnome-keyring-daemon --start --components=secrets")
-    hl.exec_cmd("hypridle")
+    -- The personal session helper owns the target and environment handoff.
+    -- An enabled idle unit must not be duplicated by a second bare daemon.
+    hl.exec_cmd("systemctl --user -q is-enabled hypridle.service || hypridle")
 
 
     -- Audio (wait for Quickshell's tray watcher so EasyEffects registers its tray icon successfully).

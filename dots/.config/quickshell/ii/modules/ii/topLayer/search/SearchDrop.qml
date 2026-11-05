@@ -142,7 +142,7 @@ Item {
         root.overviewShown = root.overviewWanted;
     }
 
-    readonly property bool isScrollingLayout: Persistent.states.hyprland.layout === "scrolling"
+    readonly property bool isScrollingLayout: GlobalStates.scrollingLayoutActive
     readonly property real launcherContentWidth: searchWidgetRef ? searchWidgetRef.implicitWidth : 0
     readonly property real launcherContentHeight: searchWidgetRef ? searchWidgetRef.implicitHeight : 0
 
@@ -218,6 +218,50 @@ Item {
         animatedRightSidebarWidth: root.animatedRightSidebarWidth
         leftSidebarActiveOnMonitor: root.leftSidebarActiveOnMonitor
         rightSidebarActiveOnMonitor: root.rightSidebarActiveOnMonitor
+    }
+
+    // ── Real Gnome: window picker and workspace indicator ──────────────────
+    // The connect-mode search owns this monitor's overview, so it also hosts what
+    // the standalone overview window does there: the hit areas over the window
+    // captures (pick, close, drag to another workspace or monitor) and the dots.
+    // Under the drop, which keeps the search's own input. The window spans the
+    // screen, so screen coordinates are this item's.
+    readonly property var realGnomeController: GlobalStates.overviewBackgroundControllerFor(root.screen?.name ?? "")
+    readonly property bool realGnome: !!root.realGnomeController && root.realGnomeController.isRealGnome && !root.isScrollingLayout
+    // Shown with an empty query, whether or not the classic grid is wanted: with
+    // search suggestions on there is no grid, but the windows are still there.
+    readonly property bool realGnomeIdle: root.isOpen && root.realGnome
+        && (root.searchWidgetRef ? (root.searchWidgetRef.searchingText === "" && !root.searchWidgetRef.isAnySpecialMode) : true)
+        && !GlobalStates.searchOnlyMode && !GlobalStates.searchPanelActive
+    readonly property bool realGnomePickerShown: root.realGnomeIdle
+        && !!root.realGnomeController && root.realGnomeController.progress > 0.9
+    // The panel's input mask takes the whole screen while this is up.
+    readonly property bool coversScreen: root.isOverviewVisible || root.realGnomePickerShown
+    // Clicking away from the windows leaves the overview, as the standalone one does.
+    MouseArea {
+        anchors.fill: parent
+        enabled: root.realGnomePickerShown
+        visible: enabled
+        onClicked: GlobalStates.overviewOpen = false
+    }
+    Loader {
+        anchors.fill: parent
+        active: root.realGnome && root.isWidgetActive
+        sourceComponent: RealGnomeWindowPicker {
+            screenName: root.screen?.name ?? ""
+            shown: root.realGnomePickerShown
+        }
+    }
+    Loader {
+        active: root.realGnome && root.isWidgetActive
+        readonly property var reserved: HyprlandData.monitors.find(m => m.name === (root.screen?.name ?? ""))?.reserved ?? [0, 0, 0, 0]
+        x: (root.width - (item ? item.width : 0)) / 2
+        y: root.height - reserved[3] - 20 - (item ? item.height / 2 : 0)
+        sourceComponent: RealGnomeWorkspaceIndicator {
+            screenName: root.screen?.name ?? ""
+            shown: root.realGnomeIdle
+                && !!root.realGnomeController && root.realGnomeController.progress > 0.6
+        }
     }
 
     HyprlandFocusGrab {
@@ -317,6 +361,8 @@ Item {
         shoulderRadius: Appearance.rounding.windowRounding
         cornerRadius: Appearance.rounding.windowRounding
         surfaceColor: root.themeBgColor
+        // Hidden with the field it holds while the scrolling overview is idle.
+        opacity: dropContainer.opacity
         transform: Scale {
             yScale: root.isBottomBar ? -1 : 1
             origin.y: dropSurface.height / 2
@@ -332,6 +378,15 @@ Item {
         width: Math.min(root.dropW, dropSurface.visibleWidth)
         height: dropSurface.visibleHeight
         visible: dropSurface.visible
+        // The scrolling overview copies the scrolloverview plugin, which has no
+        // search bar: the field stays focused but unseen until a query or a mode
+        // needs it. Opacity only - a hidden item would lose the keyboard.
+        readonly property bool scrollingIdle: root.isScrollingLayout && scrollingOverviewLoader.active
+            && (root.searchWidgetRef ? (root.searchWidgetRef.searchingText === "" && !root.searchWidgetRef.isAnySpecialMode) : true)
+        opacity: scrollingIdle ? 0 : 1
+        Behavior on opacity {
+            animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+        }
 
         onXChanged: root._updateBlurExclusion()
         onYChanged: root._updateBlurExclusion()
@@ -489,9 +544,9 @@ Item {
         // above the collapsed search instead of riding the drop as it grows.
         anchors.fill: parent
         active: (loadedOnce || root.isWidgetActive) && root.isScrollingLayout && !Config.options.search.suggestions.enable
-        // The rows play their own entrance and exit (staggered in, quick out);
-        // the drop only shows and hides the layer they live on.
-        visible: root.isWidgetActive
+        // The overview zooms its windows back to full size after a close, so the
+        // layer stays shown while it is still drawing.
+        visible: root.isWidgetActive || (item?.drawing ?? false)
 
         sourceComponent: ScrollingOverviewWidget {
             anchors.fill: parent

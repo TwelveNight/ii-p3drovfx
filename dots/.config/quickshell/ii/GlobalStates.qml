@@ -300,7 +300,8 @@ Singleton {
         const monitors = HyprlandData.monitors;
         if (!monitors)
             return false;
-        return monitors.some(mon => mon.specialWorkspace && mon.specialWorkspace.name !== "" && (mon.specialWorkspace.id ?? 0) !== 0);
+        // Name only: since Hyprland 0.57 a special workspace carries no numeric id.
+        return monitors.some(mon => mon.specialWorkspace && mon.specialWorkspace.name !== "");
     }
     property bool scratchpadEmptyOverlayActive: false
     readonly property bool overviewBackgroundActive: {
@@ -308,7 +309,9 @@ Singleton {
         const allowOverviewBg = Config.options && Config.options.overview && Config.options.overview.animationStyle !== "none";
         return Boolean(background && (background.useBackgroundOverviewAlways
             || (background.zoomOutEnabled
-                && ((root.classicOverviewOpen && allowOverviewBg) || root.cheatsheetOpen))));
+                // The scrolling layout's overview zooms its own windows, like the
+                // scrolloverview plugin, and leaves the wallpaper where it is.
+                && ((root.classicOverviewOpen && allowOverviewBg && !root.scrollingLayoutActive) || root.cheatsheetOpen))));
     }
 
     // BackgroundRoot owns one controller per monitor. Other background surfaces
@@ -1156,7 +1159,7 @@ Singleton {
         // A special workspace is summoned over the desktop; close it first,
         // as the lock does.
         const specName = mData.specialWorkspace?.name ?? "";
-        if (specName !== "" && (mData.specialWorkspace?.id ?? 0) !== 0) {
+        if (specName !== "") {
             let clean = specName.startsWith("special:") ? specName.substring(8) : specName;
             if (!clean)
                 clean = "special";
@@ -1446,6 +1449,23 @@ Singleton {
         }
     }
     property string activeSearchMonitor: ""
+    // The monitor the overview opened on, held while it is open and through its
+    // close. The zoom, the window captures and the Real Gnome picker belong to
+    // it, not to whichever monitor the pointer is over: following Hyprland's
+    // focus moved the overview mid-gesture as soon as a dragged window crossed
+    // to another monitor. Empty while nothing holds it; then the focused one.
+    property string overviewMonitorLatch: ""
+    readonly property string overviewMonitor: root.overviewMonitorLatch !== ""
+        ? root.overviewMonitorLatch : (Hyprland.focusedMonitor?.name ?? "")
+    Timer {
+        id: overviewMonitorReleaseTimer
+        // Outlives the close animation, so the closing zoom stays where it opened.
+        interval: 1500
+        onTriggered: {
+            if (!root.overviewOpen)
+                root.overviewMonitorLatch = "";
+        }
+    }
     property real activeSearchHeight: 0
     property real activeSearchWidth: 0
     property string activeSearchQuery: ""
@@ -1473,7 +1493,8 @@ Singleton {
     // Real Gnome opens on every monitor, not only the one under the pointer.
     readonly property bool realGnomeMirrored: Quickshell.screens.length > 1
         && (Config.options?.background?.overviewBackgroundStyle ?? "") === "real-gnome"
-        && Persistent.states.hyprland.layout !== "scrolling"
+        && (Config.options?.background?.realGnomeAllMonitors ?? false)
+        && !root.scrollingLayoutActive
         && !(Config.options?.background?.useBackgroundOverviewAlways ?? false)
     function realGnomeAreaFor(screenName) {
         const own = root.realGnomeAreas[screenName];
@@ -2319,12 +2340,22 @@ Singleton {
     }
 
     /**
+     * Hyprland's native scrolling layout and zscroll (`lua:zscroll`, rows of
+     * windows on a vertical tape) both keep a workspace larger than the screen.
+     * Everything that lays itself out for "the scrolling layout" - the scrolling
+     * overview, the wallpaper, the search - asks this, not the raw layout name.
+     */
+    readonly property bool scrollingLayoutActive: Persistent.states.hyprland.layout === "scrolling"
+        || root.zscrollLayoutActive
+    readonly property bool zscrollLayoutActive: Persistent.states.hyprland.layout === "lua:zscroll"
+
+    /**
      * The scrolling overview is the search's idle face with Hyprland's scrolling
      * layout, so the search options that replace or hide it are locked off
      * there: centred search, always listing apps and suggestions. Settings shows
      * them disabled with the reason.
      */
-    readonly property bool scrollingSearchLock: Persistent.states.hyprland.layout === "scrolling"
+    readonly property bool scrollingSearchLock: root.scrollingLayoutActive
     onScrollingSearchLockChanged: Qt.callLater(root.enforceScrollingSearchLock)
     function enforceScrollingSearchLock() {
         if (!Config.ready || !root.scrollingSearchLock)
@@ -3303,8 +3334,11 @@ Singleton {
             if (root.activeSearchMonitor === "") {
                 root.activeSearchMonitor = Hyprland.focusedMonitor?.name ?? "";
             }
+            overviewMonitorReleaseTimer.stop();
+            root.overviewMonitorLatch = root.activeSearchMonitor;
         } else {
             root.activeSearchMonitor = "";
+            overviewMonitorReleaseTimer.restart();
             // A panel cannot outlive the surface that hosted it, and a flag
             // left set would make the next Super press try to leave a panel
             // that is not there instead of opening the launcher.

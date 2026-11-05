@@ -289,6 +289,8 @@ Singleton {
 
     Process {
         id: remoteHeadProc
+        // Use a durable cwd even when the shell was launched from a removed folder.
+        workingDirectory: root.stateDir
         command: root.personalOverlay
             ? [FileUtils.trimFileProtocol(Directories.home + "/.local/bin/desktop-update"), "check", "hyprland-ii", "--json"]
             : ["bash", "-c", 'git ls-remote --heads "$1" "$2" 2>/dev/null | awk \'{print $1; exit}\'', "ii-remote-head", root.activeRemote, root.activeBranch]

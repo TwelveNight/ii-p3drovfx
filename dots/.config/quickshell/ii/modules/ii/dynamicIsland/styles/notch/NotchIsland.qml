@@ -778,7 +778,7 @@ Scope {
     property real overviewReveal: root.overviewVisible ? 1.0 : 0.0
     property real overviewFade: root.overviewVisible ? 1.0 : 0.0
     readonly property bool overviewAnimating: root.searchActive || root.overviewReveal > 0.001 || root.overviewFade > 0.001
-    readonly property bool scrollingLayout: Persistent.states.hyprland.layout === "scrolling"
+    readonly property bool scrollingLayout: GlobalStates.scrollingLayoutActive
 
     /**
      * The workspace grid is built once and then kept.
@@ -2057,7 +2057,10 @@ Scope {
         }
 
         HyprlandFocusGrab {
-            windows: [win]
+            // Popups opened from inside the island (e.g. a tray item's menu in Active
+            // apps) are separate Wayland windows registered in GlobalFocusGrab; without
+            // them here, every click on such a menu counted as a click outside.
+            windows: [win, ...GlobalFocusGrab.persistent]
             // The dashboard joins the two that already grabbed: it is as much an open
             // surface as they are, and having the session menu inside it close on a
             // click away while the dashboard holding it would not was the tell.

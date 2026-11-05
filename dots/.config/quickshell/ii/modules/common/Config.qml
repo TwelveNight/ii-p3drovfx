@@ -1977,6 +1977,7 @@ Singleton {
             "policies.translator": [0, 1, 2],
             "policies.player": [0, 1],
             "policies.phone": [0, 1],
+            "policies.anki": [0, 1],
             "phone.webcam.cameraFacing": ["front", "back"],
             "phone.webcam.resolution": ["640x480", "1280x720", "1920x1080"],
             "phone.webcam.rotateDegrees": [0, 90, 180, 270],
@@ -2720,6 +2721,7 @@ Singleton {
                 property int translator: 1 // 0: No | 1: Default (illogical-impulse) | 2: Expressive (reworked)
                 property int player: 0 // 0: No | 1: Yes
                 property int phone: 1 // 0: No | 1: Yes — Phone tab (future KDE Connect + scrcpy external)
+                property int anki: 0 // 0: No | 1: Yes — Anki tab (scripts/anki, installs its engine on first use)
             }
 
             property JsonObject phone: JsonObject {
@@ -3260,6 +3262,10 @@ Singleton {
                 // Sample intervals between full /proc sweeps for new GPU clients.
                 // Only a backstop; a new window forces one immediately.
                 property int gpuFullEvery: 30
+                // Per-app TCP data from the kernel's socket counters, no privilege
+                // needed. UDP (QUIC) and connections shorter than one sample are not
+                // matched to an app and land in the device's unattributed row.
+                property bool trackNetwork: true
                 // Seconds without input before foreground time stops accruing.
                 // 0 turns the idle monitor off, and time keeps running.
                 property int idleTimeoutSec: 300
@@ -4803,6 +4809,9 @@ Singleton {
                 // Semantic style name. Empty keeps the legacy numeric setting
                 // active until the user chooses a new preset in Settings.
                 property string overviewBackgroundStyle: ""
+                // Real Gnome: also zoom the wallpaper (and offer a window picker) on
+                // the monitors the overview did not open on. Off = only the focused one.
+                property bool realGnomeAllMonitors: false
                 property bool materialShapeShadow: false
                 property real materialShapeScale: 1.0
                 property bool cheatsheetZoomOut: true
@@ -5400,6 +5409,8 @@ Singleton {
                     property bool disableWifi: false
                     property bool disableBluetooth: false
                     property bool disableMedia: false
+                    // Media bubble stays open as a wide pill with the lyric / track name.
+                    property bool pinMediaBubble: false
                     property bool disableNotification: false
                     property bool disableOsd: false
                     property bool disableRecording: false
@@ -6659,6 +6670,13 @@ Singleton {
                      * people develop on.
                      */
                     property bool allowMouse: false
+                    /**
+                     * Whether mouse clicks can raise the keyboard while in desktop mode.
+                     *
+                     * Off by default so that mouse clicks on text fields in desktop mode
+                     * never raise the keyboard even if allowMouse is enabled.
+                     */
+                    property bool allowMouseInDesktop: false
                     // How long after a touch a text field may claim focus and still count as touch-driven.
                     property int touchWindowMs: 1200
                     property bool hideOnPhysicalKey: true
@@ -6964,6 +6982,14 @@ Singleton {
                     property bool blurEnabled: true
                     property bool autoResize: true
                     property bool speakingPulseContinuous: true
+                    // Toast in the widget when someone joins or leaves your channel
+                    property bool joinLeaveNotices: true
+                    // Push-to-talk chip (lit while transmitting) when Discord is in PTT mode
+                    property bool pttIndicator: true
+                    // DM and mention toasts in the widget (Vesktop companion only)
+                    property bool messageNotices: true
+                    // Show the message text in those toasts, not only who sent it
+                    property bool messagePreview: true
                     // Pin the overlay on screen while the bridge sees a call
                     property bool autoPin: false
                 }
@@ -7095,6 +7121,10 @@ Singleton {
                 property bool enableManualScale: false
                 property real autoScaleFactor: 1.0 // Multiplier for automatic scaling (0.5 to 1.5)
                 property real scale: 0.18 // Relative to screen size (used when enableManualScale is true)
+                // Scrolling layout overview, drawn like the scrolloverview plugin: each
+                // workspace card is the monitor at this scale, cards this far apart (px).
+                property real scrollingScale: 0.6
+                property int scrollingWorkspaceGap: 60
                 property string animationStyle: "zoom" // Options: "bounce", "smooth", "zoom", "none"
                 property bool enableCascadeAnimation: true
                 property real rows: 2
